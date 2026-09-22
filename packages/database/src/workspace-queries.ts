@@ -3,6 +3,8 @@ import type { SkrivebordDatabase } from "./client";
 import {
   actionIntent,
   auditEvent,
+  calendarEvent,
+  calendarSource,
   workItem,
   yearPlanItem
 } from "./schema";
@@ -64,4 +66,33 @@ export async function listActivityEvents(
     .where(eq(auditEvent.workspaceId, workspaceId))
     .orderBy(desc(auditEvent.occurredAt))
     .limit(limit);
+}
+
+export async function listCalendarEvents(
+  db: SkrivebordDatabase,
+  workspaceId: string
+) {
+  return db
+    .select({
+      id: calendarEvent.id,
+      title: calendarEvent.title,
+      category: calendarEvent.category,
+      startAt: calendarEvent.startAt,
+      endAt: calendarEvent.endAt,
+      startDate: calendarEvent.startDate,
+      endDate: calendarEvent.endDate,
+      allDay: calendarEvent.allDay,
+      timezone: calendarEvent.timezone,
+      status: calendarEvent.status,
+      provider: calendarSource.provider,
+      sourceName: calendarSource.displayName,
+      syncState: calendarSource.syncState,
+      lastSyncedAt: calendarSource.lastSyncedAt
+    })
+    .from(calendarEvent)
+    .innerJoin(
+      calendarSource,
+      eq(calendarEvent.calendarSourceId, calendarSource.id)
+    )
+    .where(eq(calendarEvent.workspaceId, workspaceId));
 }
