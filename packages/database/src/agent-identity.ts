@@ -1,4 +1,3 @@
-import type { PrincipalContext } from "@skrivebord/contracts";
 import {
   and,
   eq,
@@ -253,10 +252,10 @@ export async function revokeAgentCredential(
     );
 }
 
-export function intersectAgentCapabilities(
-  apiKeyCapabilities: readonly string[],
+export function intersectAgentCapabilities<T extends string>(
+  apiKeyCapabilities: readonly T[],
   bindingCapabilities: readonly string[]
-): PrincipalContext["capabilities"] {
+): T[] {
   const allowed = new Set(
     bindingCapabilities
   );
