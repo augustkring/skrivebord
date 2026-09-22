@@ -14,12 +14,17 @@ import {
 import {
   actionIntent,
   auditEvent,
+  calendarEvent,
+  calendarSource,
+  connectorAccount,
   createCompleteWorkItemAction,
   createDatabasePool,
   listTodayItems,
+  persistCalendarSync,
   PostgresActionStore,
   recomputeToday,
   seedAlsLebenPilotData,
+  syncCursor,
   withPrincipalTransaction,
   workItem,
   workspaceProfile
@@ -248,6 +253,108 @@ describeDatabase("database tenant isolation", () => {
 
     expect(audits.at(-1)?.outcome).toBe("SUCCEEDED");
     expect(audits.at(-1)?.requestId).toBe("pilot-flow");
+  });
+
+
+  it("persists provider calendar sync and stores only protected cursor material", async () => {
+    const actor = principal(workspaceA, "calendar-sync");
+
+    const stored = await withPrincipalTransaction(
+      pool,
+      actor,
+      async ({ db }) => {
+        const [account] = await db
+          .insert(connectorAccount)
+          .values({
+            workspaceId: workspaceA,
+            provider: "GOOGLE",
+            displayName: "Google Calendar",
+            providerAccountId: `google-${suffix}`,
+            status: "CONNECTED",
+            scopes: ["calendar.events.readonly"],
+            connectedBy: actor.principalId
+          })
+          .returning({ id: connectorAccount.id });
+
+        if (!account) throw new Error("CONNECTOR_ACCOUNT_CREATE_FAILED");
+
+        const [source] = await db
+          .insert(calendarSource)
+          .values({
+            workspaceId: workspaceA,
+            provider: "GOOGLE",
+            connectorAccountId: account.id,
+            providerCalendarId: "primary",
+            displayName: "Primær kalender",
+            writable: false,
+            syncState: "SYNCING"
+          })
+          .returning({ id: calendarSource.id });
+
+        if (!source) throw new Error("CALENDAR_SOURCE_CREATE_FAILED");
+
+        const result = await persistCalendarSync(db, {
+          workspaceId: workspaceA,
+          connectorAccountId: account.id,
+          calendarSourceId: source.id,
+          resourceScope: "primary",
+          provider: "GOOGLE",
+          mode: "INITIAL",
+          result: {
+            fullResyncRequired: false,
+            cursor: {
+              type: "GOOGLE_SYNC_TOKEN",
+              value: "raw-sync-token"
+            },
+            events: [
+              {
+                providerEventId: "google-event-1",
+                providerVersion: "etag-1",
+                title: "Google event",
+                startAt: "2026-09-25T09:00:00+02:00",
+                endAt: "2026-09-25T10:00:00+02:00",
+                allDay: false,
+                timezone: "Europe/Copenhagen",
+                status: "CONFIRMED",
+                sourceUpdatedAt: "2026-09-22T10:00:00Z"
+              }
+            ]
+          },
+          protectCursor: (raw) => `protected:${raw}`,
+          now: new Date("2026-09-22T10:05:00Z")
+        });
+
+        const [event] = await db
+          .select()
+          .from(calendarEvent)
+          .where(eq(calendarEvent.providerEventId, "google-event-1"));
+
+        const [cursor] = await db
+          .select()
+          .from(syncCursor)
+          .where(eq(syncCursor.connectorAccountId, account.id));
+
+        return {
+          result,
+          event,
+          cursor
+        };
+      }
+    );
+
+    expect(stored.result).toMatchObject({
+      applied: true,
+      fullResyncRequired: false,
+      itemsSeen: 1,
+      itemsCreated: 1
+    });
+    expect(stored.event?.title).toBe("Google event");
+    expect(stored.cursor?.cursorValueProtected).toBe(
+      "protected:raw-sync-token"
+    );
+    expect(stored.cursor?.cursorValueProtected).not.toBe(
+      "raw-sync-token"
+    );
   });
 
   it("keeps audit append-only for the application role", async () => {
