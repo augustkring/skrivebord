@@ -70,6 +70,7 @@ export type GoogleCalendarSyncSummary = {
 
 export async function runGoogleCalendarSync(input: {
   workspaceId: string;
+  sourceIds?: string[];
   now?: Date;
 }): Promise<GoogleCalendarSyncSummary> {
   const now = input.now ?? new Date();
@@ -175,9 +176,16 @@ export async function runGoogleCalendarSync(input: {
 
   const connector = new GoogleCalendarConnector();
 
+  const selectedSources =
+    input.sourceIds && input.sourceIds.length > 0
+      ? context.sources.filter((source) =>
+          input.sourceIds?.includes(source.id)
+        )
+      : context.sources;
+
   const summary: GoogleCalendarSyncSummary = {
     connectorAccountId: context.account.id,
-    calendarsAttempted: context.sources.length,
+    calendarsAttempted: selectedSources.length,
     calendarsSucceeded: 0,
     calendarsFailed: 0,
     fullResyncs: 0,
@@ -194,7 +202,7 @@ export async function runGoogleCalendarSync(input: {
     ])
   );
 
-  for (const source of context.sources) {
+  for (const source of selectedSources) {
     const cursorRow = cursorByScope.get(
       source.providerCalendarId
     );
