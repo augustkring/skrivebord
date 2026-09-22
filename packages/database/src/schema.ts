@@ -122,3 +122,20 @@ export const auditEvent = pgTable("audit_event", {
   outcome: text("outcome").notNull(),
   metadata: jsonb("metadata_sanitized_json").notNull().default({})
 }, (t) => [index("audit_workspace_time_idx").on(t.workspaceId, t.occurredAt)]);
+
+
+export const agentCredentialBinding = pgTable("agent_credential_binding", {
+  id: uuid("id").primaryKey(),
+  workspaceId: text("workspace_id").notNull(),
+  agentId: uuid("agent_id").notNull(),
+  apiKeyId: text("api_key_id").notNull(),
+  enabled: boolean("enabled").notNull().default(true),
+  capabilities: jsonb("capabilities_json").notNull().default([]),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  lastUsedAt: timestamp("last_used_at", { withTimezone: true }),
+  expiresAt: timestamp("expires_at", { withTimezone: true }),
+  revokedAt: timestamp("revoked_at", { withTimezone: true })
+}, (t) => [
+  uniqueIndex("agent_credential_api_key_unique").on(t.apiKeyId),
+  index("agent_credential_workspace_agent_idx").on(t.workspaceId, t.agentId)
+]);
