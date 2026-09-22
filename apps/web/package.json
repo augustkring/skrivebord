@@ -7,17 +7,25 @@
     "start": "next start"
   },
   "dependencies": {
+    "@better-auth/api-key": "1.7.5",
+    "@better-auth/passkey": "1.7.5",
     "@skrivebord/actions": "workspace:*",
+    "@skrivebord/auth": "workspace:*",
     "@skrivebord/contracts": "workspace:*",
     "@skrivebord/database": "workspace:*",
     "@skrivebord/domain": "workspace:*",
     "@skrivebord/policy": "workspace:*",
     "@tailwindcss/postcss": "^4.3.3",
+    "better-auth": "1.7.5",
     "lucide-react": "^0.544.0",
     "next": "16.3.3",
+    "pg": "8.23.0",
     "react": "^19.2.3",
     "react-dom": "^19.2.3",
     "tailwindcss": "^4.3.3",
     "zod": "^4.1.11"
+  },
+  "devDependencies": {
+    "@types/pg": "8.23.1"
   }
 }
