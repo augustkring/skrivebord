@@ -32,7 +32,9 @@
     "@modelcontextprotocol/server": "2.0.0",
     "@skrivebord/agent": "workspace:*",
     "mcp-handler": "2.2.0",
-    "@skrivebord/connectors": "workspace:*"
+    "@skrivebord/connectors": "workspace:*",
+    "@openclaw/gateway-client": "2026.8.1",
+    "@openclaw/gateway-protocol": "2026.8.1"
   },
   "devDependencies": {
     "@types/pg": "8.23.1"
