@@ -98,7 +98,9 @@ export const auth = betterAuth({
           await syncWorkspaceProfile(organization);
         },
         async afterUpdateOrganization({ organization }) {
-          await syncWorkspaceProfile(organization);
+          if (organization) {
+            await syncWorkspaceProfile(organization);
+          }
         }
       },
       async sendInvitationEmail(data) {
