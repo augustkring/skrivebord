@@ -46,8 +46,12 @@ create policy approval_request_isolation on approval_request
   using (workspace_id = current_setting('app.workspace_id', true))
   with check (workspace_id = current_setting('app.workspace_id', true));
 
-create policy audit_event_isolation on audit_event
+create policy audit_event_select_isolation on audit_event
   for select
   using (workspace_id = current_setting('app.workspace_id', true));
+
+create policy audit_event_insert_isolation on audit_event
+  for insert
+  with check (workspace_id = current_setting('app.workspace_id', true));
 
 revoke update, delete on audit_event from public;
