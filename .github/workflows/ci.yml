@@ -8,6 +8,24 @@ on:
 jobs:
   verify:
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: skrivebord
+          POSTGRES_PASSWORD: skrivebord
+          POSTGRES_DB: skrivebord
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U skrivebord -d skrivebord"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgresql://skrivebord:skrivebord@127.0.0.1:5432/skrivebord
+      BETTER_AUTH_SECRET: ci-only-auth-secret-at-least-32-bytes-long
+      BETTER_AUTH_URL: http://localhost:3000
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
