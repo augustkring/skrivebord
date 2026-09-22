@@ -20,17 +20,26 @@ export async function resolveWorkspaceHumanPrincipal(input: {
   const session = await auth.api.getSession({ headers: requestHeaders });
   if (!session) return null;
 
-  const organization = await auth.api.getFullOrganization({
+  const organizations = await auth.api.listOrganizations({
+    headers: requestHeaders
+  });
+
+  const organization = organizations.find(
+    (candidate) => candidate.slug === input.workspaceSlug
+  );
+
+  if (!organization) return null;
+
+  const memberResult = await auth.api.listMembers({
     query: {
-      organizationSlug: input.workspaceSlug,
-      membersLimit: 100
+      organizationId: organization.id,
+      limit: 100,
+      offset: 0
     },
     headers: requestHeaders
   });
 
-  if (!organization) return null;
-
-  const membership = organization.members.find(
+  const membership = memberResult.members.find(
     (member) => member.userId === session.user.id
   );
 
