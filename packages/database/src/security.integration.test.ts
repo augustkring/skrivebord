@@ -14,8 +14,12 @@ import {
 import {
   actionIntent,
   auditEvent,
+  createCompleteWorkItemAction,
   createDatabasePool,
+  listTodayItems,
   PostgresActionStore,
+  recomputeToday,
+  seedAlsLebenPilotData,
   withPrincipalTransaction,
   workItem,
   workspaceProfile
@@ -166,6 +170,84 @@ describeDatabase("database tenant isolation", () => {
     expect(stored.intent?.state).toBe("SUCCEEDED");
     expect(stored.audits.at(-1)?.outcome).toBe("SUCCEEDED");
     expect(stored.audits.at(-1)?.requestId).toBe("action-success");
+  });
+
+
+  it("derives pilot operations into persisted Today and completes one through the Action Layer", async () => {
+    const actor = principal(workspaceA, "pilot-flow");
+
+    const flow = await withPrincipalTransaction(
+      pool,
+      actor,
+      async ({ db }) => {
+        const now = new Date("2026-09-22T08:00:00+02:00");
+
+        await seedAlsLebenPilotData(db, workspaceA, now);
+        await recomputeToday(db, workspaceA, now);
+
+        const items = await listTodayItems(db, workspaceA);
+        const yearPlan = items.find(
+          (item) => item.kind === "YEAR_PLAN"
+        );
+
+        if (!yearPlan) {
+          throw new Error("EXPECTED_YEAR_PLAN_WORK_ITEM");
+        }
+
+        const store = new PostgresActionStore(db, workspaceA);
+        const result = await executeAction({
+          definition: createCompleteWorkItemAction(db),
+          principal: actor,
+          rawInput: {
+            workspaceId: workspaceA,
+            workItemId: yearPlan.id
+          },
+          store,
+          now
+        });
+
+        const [completed] = await db
+          .select({
+            id: workItem.id,
+            status: workItem.status,
+            completedAt: workItem.completedAt
+          })
+          .from(workItem)
+          .where(eq(workItem.id, yearPlan.id));
+
+        return {
+          items,
+          result,
+          completed
+        };
+      }
+    );
+
+    expect(
+      flow.items.some((item) => item.kind === "BOOKING_CONFLICT")
+    ).toBe(true);
+    expect(
+      flow.items.some((item) => item.kind === "GUEST_ARRIVAL_INFO")
+    ).toBe(true);
+    expect(
+      flow.items.some((item) => item.kind === "YEAR_PLAN")
+    ).toBe(true);
+    expect(flow.result.status).toBe("SUCCEEDED");
+    expect(flow.completed?.status).toBe("DONE");
+    expect(flow.completed?.completedAt).toBeInstanceOf(Date);
+
+    const audits = await withPrincipalTransaction(
+      pool,
+      principal(workspaceA, "pilot-flow-audit"),
+      ({ db }) =>
+        db
+          .select()
+          .from(auditEvent)
+          .where(eq(auditEvent.actionIntentId, flow.result.actionId!))
+    );
+
+    expect(audits.at(-1)?.outcome).toBe("SUCCEEDED");
+    expect(audits.at(-1)?.requestId).toBe("pilot-flow");
   });
 
   it("keeps audit append-only for the application role", async () => {
