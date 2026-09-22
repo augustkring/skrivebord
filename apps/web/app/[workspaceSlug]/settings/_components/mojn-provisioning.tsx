@@ -99,15 +99,23 @@ export function MojnProvisioning({
     );
   }
 
-  const active =
-    provisioned ??
-    (existing
+  const active:
+    | {
+        agentId: string;
+        name: string;
+        expiresAt: string | null;
+        lastUsedAt: string | null;
+        capabilities: string[];
+      }
+    | null = provisioned
       ? {
-          ...existing,
-          apiKey: "",
-          apiKeyId: ""
+          agentId: provisioned.agentId,
+          name: provisioned.name,
+          expiresAt: provisioned.expiresAt,
+          lastUsedAt: null,
+          capabilities: provisioned.capabilities
         }
-      : null);
+      : existing;
 
   return (
     <div className="mt-4 rounded-lg border border-[var(--border-default)] bg-white p-4">
@@ -141,8 +149,7 @@ export function MojnProvisioning({
                   Capabilities:{" "}
                   {active.capabilities.join(", ")}
                 </div>
-                {"expiresAt" in active &&
-                active.expiresAt ? (
+                {active.expiresAt ? (
                   <div>
                     Udløber:{" "}
                     {new Intl.DateTimeFormat(
@@ -158,8 +165,7 @@ export function MojnProvisioning({
                     )}
                   </div>
                 ) : null}
-                {"lastUsedAt" in active &&
-                active.lastUsedAt ? (
+                {active.lastUsedAt ? (
                   <div>
                     Sidst brugt:{" "}
                     {new Intl.DateTimeFormat(
