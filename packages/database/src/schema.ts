@@ -149,6 +149,8 @@ export const calendarSource = pgTable("calendar_source", {
   providerCalendarId: text("provider_calendar_id").notNull(),
   displayName: text("display_name").notNull(),
   writable: boolean("writable").notNull().default(false),
+  isPrimary: boolean("is_primary").notNull().default(false),
+  accessRole: text("access_role"),
   syncState: text("sync_state").notNull().default("CONNECTED"),
   lastSyncedAt: timestamp("last_synced_at", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
