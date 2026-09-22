@@ -22,6 +22,15 @@ jobs:
           name: pnpm-lock
           path: pnpm-lock.yaml
           retention-days: 1
+      - name: Generate Better Auth schema
+        run: |
+          mkdir -p generated
+          pnpm dlx auth@1.7.5 generate --config apps/web/lib/auth.ts --output generated/better-auth.sql --yes
+      - uses: actions/upload-artifact@v4
+        with:
+          name: better-auth-schema
+          path: generated/better-auth.sql
+          retention-days: 1
       - run: pnpm lint
       - run: pnpm typecheck
       - run: pnpm test
