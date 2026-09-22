@@ -17,7 +17,7 @@ export const workspaceProfile = pgTable("workspace_profile", {
 });
 
 export const agentProfile = pgTable("agent_profile", {
-  id: uuid("id").primaryKey(),
+  id: uuid("id").primaryKey().defaultRandom(),
   workspaceId: text("workspace_id").notNull(),
   name: text("name").notNull(),
   runtimeType: text("runtime_type").notNull().default("OPENCLAW"),
@@ -30,7 +30,7 @@ export const agentProfile = pgTable("agent_profile", {
 }, (t) => [index("agent_workspace_idx").on(t.workspaceId)]);
 
 export const booking = pgTable("booking", {
-  id: uuid("id").primaryKey(),
+  id: uuid("id").primaryKey().defaultRandom(),
   workspaceId: text("workspace_id").notNull(),
   propertyId: uuid("property_id").notNull(),
   externalSource: text("external_source").notNull(),
@@ -50,7 +50,7 @@ export const booking = pgTable("booking", {
 ]);
 
 export const workItem = pgTable("work_item", {
-  id: uuid("id").primaryKey(),
+  id: uuid("id").primaryKey().defaultRandom(),
   workspaceId: text("workspace_id").notNull(),
   moduleId: text("module_id").notNull(),
   kind: text("kind").notNull(),
@@ -69,7 +69,7 @@ export const workItem = pgTable("work_item", {
 }, (t) => [uniqueIndex("work_item_dedupe_unique").on(t.workspaceId, t.dedupeFingerprint)]);
 
 export const actionIntent = pgTable("action_intent", {
-  id: uuid("id").primaryKey(),
+  id: uuid("id").primaryKey().defaultRandom(),
   workspaceId: text("workspace_id").notNull(),
   actionId: text("action_id").notNull(),
   requestedByPrincipalId: text("requested_by_principal_id").notNull(),
@@ -87,7 +87,7 @@ export const actionIntent = pgTable("action_intent", {
 }, (t) => [index("action_intent_workspace_idx").on(t.workspaceId)]);
 
 export const approvalRequest = pgTable("approval_request", {
-  id: uuid("id").primaryKey(),
+  id: uuid("id").primaryKey().defaultRandom(),
   workspaceId: text("workspace_id").notNull(),
   actionIntentId: uuid("action_intent_id").notNull(),
   requestedByPrincipalId: text("requested_by_principal_id").notNull(),
@@ -107,7 +107,7 @@ export const approvalRequest = pgTable("approval_request", {
 }, (t) => [index("approval_workspace_state_idx").on(t.workspaceId, t.state)]);
 
 export const auditEvent = pgTable("audit_event", {
-  id: uuid("id").primaryKey(),
+  id: uuid("id").primaryKey().defaultRandom(),
   workspaceId: text("workspace_id").notNull(),
   occurredAt: timestamp("occurred_at", { withTimezone: true }).notNull().defaultNow(),
   actorPrincipalId: text("actor_principal_id").notNull(),
@@ -125,7 +125,7 @@ export const auditEvent = pgTable("audit_event", {
 
 
 export const agentCredentialBinding = pgTable("agent_credential_binding", {
-  id: uuid("id").primaryKey(),
+  id: uuid("id").primaryKey().defaultRandom(),
   workspaceId: text("workspace_id").notNull(),
   agentId: uuid("agent_id").notNull(),
   apiKeyId: text("api_key_id").notNull(),
