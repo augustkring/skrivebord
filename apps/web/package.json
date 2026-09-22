@@ -8,7 +8,10 @@
   },
   "dependencies": {
     "@better-auth/api-key": "1.6.17",
+    "@better-auth/core": "1.6.17",
     "@better-auth/passkey": "1.6.17",
+    "@better-auth/utils": "0.4.1",
+    "@better-fetch/fetch": "1.3.0",
     "@skrivebord/actions": "workspace:*",
     "@skrivebord/auth": "workspace:*",
     "@skrivebord/contracts": "workspace:*",
@@ -17,13 +20,15 @@
     "@skrivebord/policy": "workspace:*",
     "@tailwindcss/postcss": "^4.3.3",
     "better-auth": "1.6.17",
+    "better-call": "1.3.6",
     "lucide-react": "^0.544.0",
+    "nanostores": "1.5.3",
     "next": "16.3.3",
     "pg": "8.23.0",
-    "react": "^19.2.3",
-    "react-dom": "^19.2.3",
+    "react": "19.3.0",
+    "react-dom": "19.3.0",
     "tailwindcss": "^4.3.3",
-    "zod": "^4.1.11"
+    "zod": "4.6.5"
   },
   "devDependencies": {
     "@types/pg": "8.23.1"
