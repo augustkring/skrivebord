@@ -1,0 +1,12 @@
+{
+  "name": "@skrivebord/agent",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": { ".": "./src/index.ts" },
+  "dependencies": {
+    "@skrivebord/contracts": "workspace:*",
+    "@skrivebord/domain": "workspace:*",
+    "@skrivebord/policy": "workspace:*"
+  }
+}
