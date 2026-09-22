@@ -138,3 +138,38 @@ export function assertPrincipalWorkspace(principal: PrincipalContext, workspaceI
 export function requiresStepUp(principal: PrincipalContext): boolean {
   return principal.principalType === "HUMAN" && principal.authStrength !== "STEP_UP";
 }
+
+
+export type VerifiedApiKeyIdentity = {
+  keyId: string;
+  organizationId: string;
+};
+
+export type AgentCredentialBinding = {
+  credentialId: string;
+  agentId: string;
+  workspaceId: string;
+  enabled: boolean;
+  capabilities: readonly Capability[];
+};
+
+export function resolveBoundAgentPrincipal(input: {
+  verifiedKey: VerifiedApiKeyIdentity;
+  binding: AgentCredentialBinding;
+  requestId: string;
+}): PrincipalContext | null {
+  const { verifiedKey, binding, requestId } = input;
+
+  if (!binding.enabled) return null;
+  if (binding.credentialId !== verifiedKey.keyId) return null;
+  if (binding.workspaceId !== verifiedKey.organizationId) return null;
+
+  return resolveAgentPrincipal(
+    {
+      agentId: binding.agentId,
+      workspaceId: binding.workspaceId,
+      capabilities: binding.capabilities
+    },
+    requestId
+  );
+}
