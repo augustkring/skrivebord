@@ -1,4 +1,9 @@
-import type { PolicyDecision, PrincipalContext, RiskLevel, ToolResult } from "@skrivebord/contracts";
+import type {
+  PolicyDecision,
+  PrincipalContext,
+  RiskLevel,
+  ToolResult
+} from "@skrivebord/contracts";
 import { evaluateActionPolicy } from "@skrivebord/policy";
 import type { z } from "zod";
 import {
@@ -38,49 +43,59 @@ export type ActionDefinition<Input, Result> = {
   externalCommunication?: boolean;
 };
 
+export type ActionIntentState =
+  | "PENDING"
+  | "WAITING_APPROVAL"
+  | "SUCCEEDED"
+  | "FAILED";
+
 export type ActionIntentRecord = {
   id: string;
   workspaceId: string;
   actionId: string;
   requestedByPrincipalId: string;
-  requestedByPrincipalType: string;
+  requestedByPrincipalType: PrincipalContext["principalType"];
   parameters: unknown;
   parametersDigest: string;
   humanSummary: string;
   riskLevel: RiskLevel;
   policyDecision: PolicyDecision["type"];
-  state: "PENDING" | "WAITING_APPROVAL" | "SUCCEEDED" | "FAILED";
+  state: ActionIntentState;
   createdAt: string;
+};
+
+export type AuditWrite = {
+  workspaceId: string;
+  actorId: string;
+  actorType: PrincipalContext["principalType"];
+  actionId: string;
+  intentId: string;
+  approvalId?: string;
+  requestId: string;
+  source: PrincipalContext["source"];
+  outcome: string;
+  occurredAt: string;
 };
 
 export interface ActionStore extends ApprovalStore {
   createIntent(intent: ActionIntentRecord): Promise<void>;
-  appendAudit(event: {
-    workspaceId: string;
-    actorId: string;
-    actionId: string;
-    intentId: string;
-    approvalId?: string;
-    outcome: string;
-    occurredAt: string;
-  }): Promise<void>;
+  updateIntentState(intentId: string, state: ActionIntentState): Promise<void>;
+  appendAudit(event: AuditWrite): Promise<void>;
 }
 
 export class InMemoryActionStore implements ActionStore {
   intents: ActionIntentRecord[] = [];
   approvals = new Map<string, ApprovalRecord>();
-  audit: Array<{
-    workspaceId: string;
-    actorId: string;
-    actionId: string;
-    intentId: string;
-    approvalId?: string;
-    outcome: string;
-    occurredAt: string;
-  }> = [];
+  audit: AuditWrite[] = [];
 
   async createIntent(intent: ActionIntentRecord) {
     this.intents.push(intent);
+  }
+
+  async updateIntentState(intentId: string, state: ActionIntentState) {
+    const intent = this.intents.find((candidate) => candidate.id === intentId);
+    if (!intent) throw new Error("ACTION_INTENT_NOT_FOUND");
+    intent.state = state;
   }
 
   async createApproval(approval: ApprovalRecord) {
@@ -95,27 +110,44 @@ export class InMemoryActionStore implements ActionStore {
     this.approvals.set(approval.id, approval);
   }
 
-  async appendAudit(event: {
-    workspaceId: string;
-    actorId: string;
-    actionId: string;
-    intentId: string;
-    approvalId?: string;
-    outcome: string;
-    occurredAt: string;
-  }) {
+  async appendAudit(event: AuditWrite) {
     this.audit.push(event);
   }
 }
 
-function intentId(requestId: string, actionId: string): string {
-  return `intent:${requestId}:${actionId}`;
+function newId(): string {
+  return crypto.randomUUID();
 }
 
 function readWorkspaceId(value: unknown): string | undefined {
-  if (typeof value !== "object" || value === null || !("workspaceId" in value)) return undefined;
+  if (
+    typeof value !== "object" ||
+    value === null ||
+    !("workspaceId" in value)
+  ) {
+    return undefined;
+  }
+
   const workspaceId = (value as { workspaceId?: unknown }).workspaceId;
   return typeof workspaceId === "string" ? workspaceId : undefined;
+}
+
+function auditBase(
+  principal: PrincipalContext,
+  actionId: string,
+  intentId: string,
+  occurredAt: string
+): Omit<AuditWrite, "outcome" | "approvalId"> {
+  return {
+    workspaceId: principal.workspaceId,
+    actorId: principal.principalId,
+    actorType: principal.principalType,
+    actionId,
+    intentId,
+    requestId: principal.requestId,
+    source: principal.source,
+    occurredAt
+  };
 }
 
 export async function executeAction<Input, Result>(args: {
@@ -128,12 +160,21 @@ export async function executeAction<Input, Result>(args: {
 }): Promise<ToolResult<Result>> {
   const parsed = args.definition.input.safeParse(args.rawInput);
   if (!parsed.success) {
-    return { status: "FAILED", humanSummary: "Handlingen kunne ikke valideres." };
+    return {
+      status: "FAILED",
+      humanSummary: "Handlingen kunne ikke valideres."
+    };
   }
 
   const commandWorkspaceId = readWorkspaceId(parsed.data);
-  if (commandWorkspaceId !== undefined && commandWorkspaceId !== args.principal.workspaceId) {
-    return { status: "DENIED", humanSummary: "Objektet tilhører ikke det aktive workspace." };
+  if (
+    commandWorkspaceId !== undefined &&
+    commandWorkspaceId !== args.principal.workspaceId
+  ) {
+    return {
+      status: "DENIED",
+      humanSummary: "Objektet tilhører ikke det aktive workspace."
+    };
   }
 
   const now = args.now ?? new Date();
@@ -143,8 +184,14 @@ export async function executeAction<Input, Result>(args: {
     now
   };
 
-  if (args.definition.authorize && !(await args.definition.authorize(ctx))) {
-    return { status: "DENIED", humanSummary: "Du har ikke adgang til objektet." };
+  if (
+    args.definition.authorize &&
+    !(await args.definition.authorize(ctx))
+  ) {
+    return {
+      status: "DENIED",
+      humanSummary: "Du har ikke adgang til objektet."
+    };
   }
 
   const risk = args.definition.risk(ctx);
@@ -157,8 +204,10 @@ export async function executeAction<Input, Result>(args: {
     externalCommunication: args.definition.externalCommunication
   });
 
-  const id = intentId(args.principal.requestId, args.definition.id);
-  const summary = args.definition.preview ? await args.definition.preview(ctx) : args.definition.id;
+  const id = newId();
+  const summary = args.definition.preview
+    ? await args.definition.preview(ctx)
+    : args.definition.id;
   const parametersDigest = digestParameters(parsed.data);
 
   await args.store.createIntent({
@@ -172,25 +221,38 @@ export async function executeAction<Input, Result>(args: {
     humanSummary: summary,
     riskLevel: risk,
     policyDecision: decision.type,
-    state: decision.type === "REVIEW_REQUIRED" ? "WAITING_APPROVAL" : decision.type === "DENY" ? "FAILED" : "PENDING",
+    state:
+      decision.type === "REVIEW_REQUIRED"
+        ? "WAITING_APPROVAL"
+        : decision.type === "DENY"
+          ? "FAILED"
+          : "PENDING",
     createdAt: now.toISOString()
   });
 
+  const baseAudit = auditBase(
+    args.principal,
+    args.definition.id,
+    id,
+    now.toISOString()
+  );
+
   if (decision.type === "DENY") {
     await args.store.appendAudit({
-      workspaceId: args.principal.workspaceId,
-      actorId: args.principal.principalId,
-      actionId: args.definition.id,
-      intentId: id,
-      outcome: "DENIED",
-      occurredAt: now.toISOString()
+      ...baseAudit,
+      outcome: "DENIED"
     });
-    return { status: "DENIED", humanSummary: decision.reason, actionId: id };
+
+    return {
+      status: "DENIED",
+      humanSummary: decision.reason,
+      actionId: id
+    };
   }
 
   if (decision.type === "REVIEW_REQUIRED") {
     const approvalDefinition = args.definition.approval;
-    const approvalId = `approval:${id}`;
+    const approvalId = newId();
     const targetFingerprint =
       approvalDefinition?.targetFingerprint?.(ctx) ??
       fingerprintTarget({
@@ -205,27 +267,27 @@ export async function executeAction<Input, Result>(args: {
       workspaceId: args.principal.workspaceId,
       actionIntentId: id,
       requestedByPrincipal: args.principal,
-      requiredApproverScope: approvalDefinition?.requiredApproverScope ?? "OWNER",
+      requiredApproverScope:
+        approvalDefinition?.requiredApproverScope ?? "OWNER",
       humanSummary: summary,
       consequenceSummary:
         approvalDefinition?.consequenceSummary(ctx) ??
         "Handlingen har en konsekvens, der kræver menneskelig godkendelse.",
-      reversibility: approvalDefinition?.reversibility ?? "PARTIALLY_REVERSIBLE",
+      reversibility:
+        approvalDefinition?.reversibility ?? "PARTIALLY_REVERSIBLE",
       targetFingerprint,
       parameters: parsed.data,
       createdAt: now,
-      expiresAt: new Date(now.getTime() + (approvalDefinition?.expiresInMs ?? 15 * 60 * 1000))
+      expiresAt: new Date(
+        now.getTime() + (approvalDefinition?.expiresInMs ?? 15 * 60 * 1000)
+      )
     });
 
     await args.store.createApproval(approval);
     await args.store.appendAudit({
-      workspaceId: args.principal.workspaceId,
-      actorId: args.principal.principalId,
-      actionId: args.definition.id,
-      intentId: id,
+      ...baseAudit,
       approvalId,
-      outcome: "PENDING_APPROVAL",
-      occurredAt: now.toISOString()
+      outcome: "PENDING_APPROVAL"
     });
 
     return {
@@ -238,29 +300,33 @@ export async function executeAction<Input, Result>(args: {
 
   try {
     const result = await args.definition.execute(ctx);
+    await args.store.updateIntentState(id, "SUCCEEDED");
     await args.store.appendAudit({
-      workspaceId: args.principal.workspaceId,
-      actorId: args.principal.principalId,
-      actionId: args.definition.id,
-      intentId: id,
-      outcome: "SUCCEEDED",
-      occurredAt: now.toISOString()
+      ...baseAudit,
+      outcome: "SUCCEEDED"
     });
-    return { status: "SUCCEEDED", humanSummary: summary, actionId: id, data: result };
+
+    return {
+      status: "SUCCEEDED",
+      humanSummary: summary,
+      actionId: id,
+      data: result
+    };
   } catch {
+    await args.store.updateIntentState(id, "FAILED");
     await args.store.appendAudit({
-      workspaceId: args.principal.workspaceId,
-      actorId: args.principal.principalId,
-      actionId: args.definition.id,
-      intentId: id,
-      outcome: "FAILED",
-      occurredAt: now.toISOString()
+      ...baseAudit,
+      outcome: "FAILED"
     });
+
     return {
       status: "FAILED",
       humanSummary: "Handlingen kunne ikke gennemføres.",
       actionId: id,
-      recovery: { label: "Prøv igen", action: args.definition.id }
+      recovery: {
+        label: "Prøv igen",
+        action: args.definition.id
+      }
     };
   }
 }
