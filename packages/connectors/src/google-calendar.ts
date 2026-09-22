@@ -41,8 +41,13 @@ const GOOGLE_CALENDAR_BASE =
 
 function cleanDescription(value?: string): string | undefined {
   if (!value) return undefined;
-  return value
-    .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g, "")
+
+  return [...value]
+    .filter((character) => {
+      const code = character.charCodeAt(0);
+      return code >= 32 || code === 9 || code === 10 || code === 13;
+    })
+    .join("")
     .slice(0, 20_000);
 }
 
