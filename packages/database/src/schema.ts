@@ -29,6 +29,21 @@ export const agentProfile = pgTable("agent_profile", {
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow()
 }, (t) => [index("agent_workspace_idx").on(t.workspaceId)]);
 
+
+export const property = pgTable("property", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  workspaceId: text("workspace_id").notNull(),
+  name: text("name").notNull(),
+  address: jsonb("address_json").notNull().default({}),
+  timezone: text("timezone").notNull().default("Europe/Copenhagen"),
+  active: boolean("active").notNull().default(true),
+  externalRefs: jsonb("external_refs_json").notNull().default({}),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow()
+}, (t) => [
+  index("property_workspace_idx").on(t.workspaceId)
+]);
+
 export const booking = pgTable("booking", {
   id: uuid("id").primaryKey().defaultRandom(),
   workspaceId: text("workspace_id").notNull(),
@@ -47,6 +62,28 @@ export const booking = pgTable("booking", {
 }, (t) => [
   uniqueIndex("booking_external_unique").on(t.workspaceId, t.externalSource, t.externalId),
   index("booking_workspace_idx").on(t.workspaceId)
+]);
+
+
+export const yearPlanItem = pgTable("year_plan_item", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  workspaceId: text("workspace_id").notNull(),
+  moduleId: text("module_id").notNull().default("rental"),
+  propertyId: uuid("property_id"),
+  title: text("title").notNull(),
+  description: text("description").notNull(),
+  month: integer("month").notNull(),
+  windowStartDay: integer("window_start_day").notNull(),
+  windowEndDay: integer("window_end_day").notNull(),
+  recurrenceRule: text("recurrence_rule"),
+  actionTemplateId: text("action_template_id"),
+  defaultOwnerType: text("default_owner_type"),
+  defaultOwnerId: text("default_owner_id"),
+  active: boolean("active").notNull().default(true),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow()
+}, (t) => [
+  index("year_plan_workspace_month_idx").on(t.workspaceId, t.month)
 ]);
 
 export const workItem = pgTable("work_item", {
