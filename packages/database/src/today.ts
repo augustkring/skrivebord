@@ -8,6 +8,7 @@ import { and, eq, ne } from "drizzle-orm";
 import type { SkrivebordDatabase } from "./client";
 import {
   booking,
+  connectorAccount,
   workItem,
   yearPlanItem
 } from "./schema";
@@ -47,9 +48,20 @@ export async function loadOperationalSnapshot(
       )
     );
 
+  const connectors = await db
+    .select({
+      status: connectorAccount.status
+    })
+    .from(connectorAccount)
+    .where(eq(connectorAccount.workspaceId, workspaceId));
+
+  const connectorHealthy = connectors.every((connector) =>
+    ["CONNECTED", "HEALTHY", "SYNCING"].includes(connector.status)
+  );
+
   return {
     workspaceId,
-    connectorHealthy: false,
+    connectorHealthy,
     bookings: bookingRows.map((row) => ({
       id: row.id,
       workspaceId: row.workspaceId,
