@@ -9,8 +9,11 @@ import {
   MOJN_V1_CAPABILITIES
 } from "@skrivebord/policy";
 import { z } from "zod";
-import { auth } from "@/lib/auth";
 import { databasePool } from "@/lib/database";
+import {
+  createMojnApiKey,
+  deleteMojnApiKey
+} from "@/lib/mojn-credential";
 import {
   resolveWorkspaceHumanPrincipal
 } from "@/lib/principal";
@@ -18,9 +21,6 @@ import {
 const RequestSchema = z.object({
   workspaceSlug: z.string().min(1)
 }).strict();
-
-const KEY_TTL_SECONDS =
-  60 * 60 * 24 * 180;
 
 export async function POST(
   request: Request
@@ -132,32 +132,9 @@ export async function POST(
         "Provisionér Mojn credential",
       execute: async () => {
         const created =
-          await auth.api.createApiKey({
-            body: {
-              configId:
-                "agent-keys",
-              name: "Mojn",
-              organizationId:
-                principal.workspaceId,
-              expiresIn:
-                KEY_TTL_SECONDS,
-              rateLimitEnabled:
-                true,
-              rateLimitTimeWindow:
-                60_000,
-              rateLimitMax: 120,
-              permissions: {
-                skrivebord: [
-                  ...MOJN_V1_CAPABILITIES
-                ]
-              },
-              metadata: {
-                runtimeAgentKey:
-                  "mojn",
-                principalType:
-                  "AGENT"
-              }
-            },
+          await createMojnApiKey({
+            organizationId:
+              principal.workspaceId,
             headers:
               request.headers
           });
@@ -216,21 +193,10 @@ export async function POST(
               binding.capabilities
           };
         } catch (error) {
-          try {
-            await auth.api.deleteApiKey({
-              body: {
-                configId:
-                  "agent-keys",
-                keyId:
-                  created.id
-              },
-              headers:
-                request.headers
-            });
-          } catch {
-            // Best-effort cleanup. The
-            // binding still failed closed.
-          }
+          await deleteMojnApiKey({
+            keyId: created.id,
+            headers: request.headers
+          });
 
           throw error;
         }
