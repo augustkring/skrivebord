@@ -4,6 +4,7 @@
 
 alter table workspace_profile enable row level security;
 alter table agent_profile enable row level security;
+alter table agent_credential_binding enable row level security;
 alter table booking enable row level security;
 alter table work_item enable row level security;
 alter table action_intent enable row level security;
@@ -16,6 +17,11 @@ create policy workspace_profile_isolation on workspace_profile
   with check (workspace_id = current_setting('app.workspace_id', true));
 
 create policy agent_profile_isolation on agent_profile
+  for all
+  using (workspace_id = current_setting('app.workspace_id', true))
+  with check (workspace_id = current_setting('app.workspace_id', true));
+
+create policy agent_credential_binding_isolation on agent_credential_binding
   for all
   using (workspace_id = current_setting('app.workspace_id', true))
   with check (workspace_id = current_setting('app.workspace_id', true));
