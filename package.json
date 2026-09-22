@@ -9,6 +9,11 @@
     "test": "vitest run",
     "lint": "eslint ."
   },
+  "pnpm": {
+    "overrides": {
+      "@better-auth/utils": "0.5.0"
+    }
+  },
   "devDependencies": {
     "@eslint/js": "^9.36.0",
     "@types/node": "^24.5.2",
