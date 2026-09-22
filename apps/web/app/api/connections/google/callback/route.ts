@@ -16,6 +16,7 @@ import {
   getGoogleOAuthRuntimeConfig
 } from "@/lib/connector-security";
 import { databasePool } from "@/lib/database";
+import { runGoogleCalendarSync } from "@/lib/google-sync";
 import {
   verifyConnectorOAuthState
 } from "@/lib/oauth-state";
@@ -174,6 +175,16 @@ export async function GET(request: Request) {
               })
           );
 
+        const initialSync =
+          persisted.primaryCalendarSourceId
+            ? await runGoogleCalendarSync({
+                workspaceId: principal.workspaceId,
+                sourceIds: [
+                  persisted.primaryCalendarSourceId
+                ]
+              })
+            : undefined;
+
         return {
           provider: "GOOGLE" as const,
           accountEmail: identity.email,
@@ -182,7 +193,11 @@ export async function GET(request: Request) {
           calendarsDiscovered:
             persisted.calendarsDiscovered,
           writableCalendars:
-            persisted.writableCalendars
+            persisted.writableCalendars,
+          primaryCalendarSynced:
+            initialSync?.calendarsSucceeded === 1,
+          primaryEventsSeen:
+            initialSync?.eventsSeen ?? 0
         };
       }
     },
