@@ -4,8 +4,11 @@ import {
   Check,
   Clipboard,
   KeyRound,
-  LoaderCircle
+  LoaderCircle,
+  RefreshCw,
+  Trash2
 } from "lucide-react";
+import { useRouter } from "next/navigation";
 import { useState } from "react";
 
 type ExistingAgent = {
@@ -34,8 +37,14 @@ export function MojnProvisioning({
   existing: ExistingAgent;
   canManage: boolean;
 }) {
+  const router = useRouter();
   const [state, setState] = useState<
-    "IDLE" | "PROVISIONING" | "READY" | "ERROR"
+    | "IDLE"
+    | "PROVISIONING"
+    | "ROTATING"
+    | "REVOKING"
+    | "READY"
+    | "ERROR"
   >("IDLE");
   const [provisioned, setProvisioned] =
     useState<ProvisionedAgent | null>(null);
@@ -97,6 +106,101 @@ export function MojnProvisioning({
     setMessage(
       "Credential er kopieret."
     );
+  }
+
+  async function rotate() {
+    setState("ROTATING");
+    setMessage("");
+
+    const response = await fetch(
+      "/api/agents/mojn/rotate",
+      {
+        method: "POST",
+        headers: {
+          "content-type":
+            "application/json"
+        },
+        body: JSON.stringify({
+          workspaceSlug
+        })
+      }
+    );
+
+    const result = (await response
+      .json()
+      .catch(() => null)) as
+      | {
+          status?: string;
+          humanSummary?: string;
+          data?: ProvisionedAgent;
+        }
+      | null;
+
+    if (
+      !response.ok ||
+      result?.status !== "SUCCEEDED" ||
+      !result.data
+    ) {
+      setState("ERROR");
+      setMessage(
+        result?.humanSummary ??
+          "Mojn credential kunne ikke roteres."
+      );
+      return;
+    }
+
+    setProvisioned(result.data);
+    setState("READY");
+    setMessage(
+      "Credential er roteret. Kopiér den nye credential nu. Den vises ikke igen."
+    );
+  }
+
+  async function revoke() {
+    setState("REVOKING");
+    setMessage("");
+
+    const response = await fetch(
+      "/api/agents/mojn/revoke",
+      {
+        method: "POST",
+        headers: {
+          "content-type":
+            "application/json"
+        },
+        body: JSON.stringify({
+          workspaceSlug
+        })
+      }
+    );
+
+    const result = (await response
+      .json()
+      .catch(() => null)) as
+      | {
+          status?: string;
+          humanSummary?: string;
+        }
+      | null;
+
+    if (
+      !response.ok ||
+      result?.status !== "SUCCEEDED"
+    ) {
+      setState("ERROR");
+      setMessage(
+        result?.humanSummary ??
+          "Mojn credential kunne ikke tilbagekaldes."
+      );
+      return;
+    }
+
+    setProvisioned(null);
+    setState("IDLE");
+    setMessage(
+      "Mojn credential er tilbagekaldt."
+    );
+    router.refresh();
   }
 
   const active:
@@ -207,6 +311,62 @@ export function MojnProvisioning({
                   aria-hidden="true"
                 />
                 Kopiér credential
+              </button>
+            </div>
+          ) : null}
+
+          {active && canManage ? (
+            <div className="mt-4 flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={rotate}
+                disabled={
+                  state === "ROTATING" ||
+                  state === "REVOKING"
+                }
+                className="inline-flex items-center gap-2 rounded-md border border-[var(--border-strong)] bg-white px-3 py-2 text-sm font-semibold hover:bg-[var(--surface-muted)] disabled:opacity-50"
+              >
+                {state === "ROTATING" ? (
+                  <LoaderCircle
+                    size={15}
+                    className="animate-spin"
+                    aria-hidden="true"
+                  />
+                ) : (
+                  <RefreshCw
+                    size={15}
+                    aria-hidden="true"
+                  />
+                )}
+                {state === "ROTATING"
+                  ? "Roterer…"
+                  : "Rotér credential"}
+              </button>
+
+              <button
+                type="button"
+                onClick={revoke}
+                disabled={
+                  state === "ROTATING" ||
+                  state === "REVOKING"
+                }
+                className="inline-flex items-center gap-2 rounded-md border border-[var(--border-strong)] bg-white px-3 py-2 text-sm font-semibold hover:bg-[var(--surface-muted)] disabled:opacity-50"
+              >
+                {state === "REVOKING" ? (
+                  <LoaderCircle
+                    size={15}
+                    className="animate-spin"
+                    aria-hidden="true"
+                  />
+                ) : (
+                  <Trash2
+                    size={15}
+                    aria-hidden="true"
+                  />
+                )}
+                {state === "REVOKING"
+                  ? "Tilbagekalder…"
+                  : "Tilbagekald"}
               </button>
             </div>
           ) : null}
