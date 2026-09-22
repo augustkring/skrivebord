@@ -264,3 +264,117 @@ export function intersectAgentCapabilities<T extends string>(
     (capability) => allowed.has(capability)
   );
 }
+
+
+export async function getAgentProvisioningState(
+  db: SkrivebordDatabase,
+  input: {
+    workspaceId: string;
+    runtimeAgentKey: string;
+    now?: Date;
+  }
+): Promise<{
+  agentId: string;
+  name: string;
+  runtimeAgentKey: string;
+  enabled: boolean;
+  activeCredential?: {
+    apiKeyId: string;
+    capabilities: string[];
+    expiresAt?: Date;
+    lastUsedAt?: Date;
+  };
+} | undefined> {
+  const now = input.now ?? new Date();
+
+  const [agent] = await db
+    .select({
+      id: agentProfile.id,
+      name: agentProfile.name,
+      runtimeAgentKey:
+        agentProfile.runtimeAgentKey,
+      enabled: agentProfile.enabled
+    })
+    .from(agentProfile)
+    .where(
+      and(
+        eq(
+          agentProfile.workspaceId,
+          input.workspaceId
+        ),
+        eq(
+          agentProfile.runtimeAgentKey,
+          input.runtimeAgentKey
+        )
+      )
+    )
+    .limit(1);
+
+  if (!agent) return undefined;
+
+  const [binding] = await db
+    .select({
+      apiKeyId:
+        agentCredentialBinding.apiKeyId,
+      capabilities:
+        agentCredentialBinding.capabilities,
+      expiresAt:
+        agentCredentialBinding.expiresAt,
+      lastUsedAt:
+        agentCredentialBinding.lastUsedAt
+    })
+    .from(agentCredentialBinding)
+    .where(
+      and(
+        eq(
+          agentCredentialBinding.workspaceId,
+          input.workspaceId
+        ),
+        eq(
+          agentCredentialBinding.agentId,
+          agent.id
+        ),
+        eq(
+          agentCredentialBinding.enabled,
+          true
+        ),
+        isNull(
+          agentCredentialBinding.revokedAt
+        ),
+        or(
+          isNull(
+            agentCredentialBinding.expiresAt
+          ),
+          gt(
+            agentCredentialBinding.expiresAt,
+            now
+          )
+        )
+      )
+    )
+    .limit(1);
+
+  return {
+    agentId: agent.id,
+    name: agent.name,
+    runtimeAgentKey:
+      agent.runtimeAgentKey,
+    enabled: agent.enabled,
+    activeCredential: binding
+      ? {
+          apiKeyId:
+            binding.apiKeyId,
+          capabilities:
+            normalizeCapabilities(
+              binding.capabilities
+            ),
+          expiresAt:
+            binding.expiresAt ??
+            undefined,
+          lastUsedAt:
+            binding.lastUsedAt ??
+            undefined
+        }
+      : undefined
+  };
+}
