@@ -26,6 +26,7 @@ export type UpsertGoogleConnectionResult = {
   connectorAccountId: string;
   calendarsDiscovered: number;
   writableCalendars: number;
+  primaryCalendarSourceId?: string;
 };
 
 function calendarWritable(accessRole: string): boolean {
@@ -88,6 +89,7 @@ export async function upsertGoogleConnection(
   });
 
   let writableCalendars = 0;
+  let primaryCalendarSourceId: string | undefined;
 
   for (const calendar of input.calendars) {
     if (calendar.deleted || calendar.hidden) continue;
@@ -95,7 +97,7 @@ export async function upsertGoogleConnection(
     const writable = calendarWritable(calendar.accessRole);
     if (writable) writableCalendars += 1;
 
-    await db
+    const [source] = await db
       .insert(calendarSource)
       .values({
         workspaceId: input.workspaceId,
@@ -104,6 +106,8 @@ export async function upsertGoogleConnection(
         providerCalendarId: calendar.id,
         displayName: calendar.summary,
         writable,
+        isPrimary: calendar.primary,
+        accessRole: calendar.accessRole,
         syncState: "CONNECTED",
         updatedAt: now
       })
@@ -117,10 +121,19 @@ export async function upsertGoogleConnection(
           connectorAccountId: account.id,
           displayName: calendar.summary,
           writable,
+          isPrimary: calendar.primary,
+          accessRole: calendar.accessRole,
           syncState: "CONNECTED",
           updatedAt: now
         }
+      })
+      .returning({
+        id: calendarSource.id
       });
+
+    if (calendar.primary && source) {
+      primaryCalendarSourceId = source.id;
+    }
   }
 
   return {
@@ -128,7 +141,8 @@ export async function upsertGoogleConnection(
     calendarsDiscovered: input.calendars.filter(
       (calendar) => !calendar.deleted && !calendar.hidden
     ).length,
-    writableCalendars
+    writableCalendars,
+    primaryCalendarSourceId
   };
 }
 
