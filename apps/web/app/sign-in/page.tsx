@@ -1,13 +1,26 @@
 "use client";
 
 import { KeyRound, Mail } from "lucide-react";
-import { FormEvent, useState } from "react";
+import { FormEvent, useEffect, useState } from "react";
 import { authClient } from "@/lib/auth-client";
+
+function safeNextPath(raw: string | null): string {
+  if (!raw || !raw.startsWith("/") || raw.startsWith("//")) {
+    return "/alsleben/today";
+  }
+  return raw;
+}
 
 export default function SignInPage() {
   const [email, setEmail] = useState("");
+  const [nextPath, setNextPath] = useState("/alsleben/today");
   const [state, setState] = useState<"IDLE" | "SENDING" | "SENT" | "ERROR" | "PASSKEY">("IDLE");
   const [message, setMessage] = useState("");
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    setNextPath(safeNextPath(params.get("next")));
+  }, []);
 
   async function sendMagicLink(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -16,8 +29,8 @@ export default function SignInPage() {
 
     const { error } = await authClient.signIn.magicLink({
       email,
-      callbackURL: "/alsleben/today",
-      errorCallbackURL: "/sign-in?error=magic-link"
+      callbackURL: nextPath,
+      errorCallbackURL: `/sign-in?error=magic-link&next=${encodeURIComponent(nextPath)}`
     });
 
     if (error) {
@@ -37,7 +50,7 @@ export default function SignInPage() {
     const result = await authClient.signIn.passkey({
       fetchOptions: {
         onSuccess() {
-          window.location.href = "/alsleben/today";
+          window.location.href = nextPath;
         }
       }
     });
