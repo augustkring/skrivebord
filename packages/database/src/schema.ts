@@ -1,4 +1,4 @@
-import { boolean, index, integer, jsonb, pgEnum, pgTable, text, timestamp, uniqueIndex, uuid } from "drizzle-orm/pg-core";
+import { boolean, date, index, integer, jsonb, pgEnum, pgTable, text, timestamp, uniqueIndex, uuid } from "drizzle-orm/pg-core";
 
 export const principalType = pgEnum("principal_type", ["HUMAN", "AGENT", "SYSTEM"]);
 export const approvalState = pgEnum("approval_state", ["PENDING", "APPROVED", "REJECTED", "EXPIRED", "REVOKED", "CONSUMED", "SUPERSEDED"]);
@@ -104,6 +104,124 @@ export const workItem = pgTable("work_item", {
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   completedAt: timestamp("completed_at", { withTimezone: true })
 }, (t) => [uniqueIndex("work_item_dedupe_unique").on(t.workspaceId, t.dedupeFingerprint)]);
+
+
+export const connectorAccount = pgTable("connector_account", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  workspaceId: text("workspace_id").notNull(),
+  provider: text("provider").notNull(),
+  displayName: text("display_name").notNull(),
+  providerAccountId: text("provider_account_id").notNull(),
+  status: text("status").notNull().default("CONNECTED"),
+  scopes: jsonb("scopes_json").notNull().default([]),
+  connectedBy: text("connected_by").notNull(),
+  connectedAt: timestamp("connected_at", { withTimezone: true }).notNull().defaultNow(),
+  lastSuccessAt: timestamp("last_success_at", { withTimezone: true }),
+  lastErrorCode: text("last_error_code"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow()
+}, (t) => [
+  uniqueIndex("connector_account_provider_unique").on(
+    t.workspaceId,
+    t.provider,
+    t.providerAccountId
+  ),
+  index("connector_account_workspace_idx").on(t.workspaceId)
+]);
+
+export const calendarSource = pgTable("calendar_source", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  workspaceId: text("workspace_id").notNull(),
+  provider: text("provider").notNull(),
+  connectorAccountId: uuid("connector_account_id"),
+  providerCalendarId: text("provider_calendar_id").notNull(),
+  displayName: text("display_name").notNull(),
+  writable: boolean("writable").notNull().default(false),
+  syncState: text("sync_state").notNull().default("CONNECTED"),
+  lastSyncedAt: timestamp("last_synced_at", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow()
+}, (t) => [
+  uniqueIndex("calendar_source_provider_unique").on(
+    t.workspaceId,
+    t.provider,
+    t.providerCalendarId
+  ),
+  index("calendar_source_workspace_idx").on(t.workspaceId)
+]);
+
+export const calendarEvent = pgTable("calendar_event", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  workspaceId: text("workspace_id").notNull(),
+  calendarSourceId: uuid("calendar_source_id").notNull(),
+  providerEventId: text("provider_event_id").notNull(),
+  providerVersion: text("provider_version"),
+  title: text("title").notNull(),
+  descriptionSanitized: text("description_sanitized"),
+  startAt: timestamp("start_at", { withTimezone: true }),
+  endAt: timestamp("end_at", { withTimezone: true }),
+  startDate: date("start_date"),
+  endDate: date("end_date"),
+  allDay: boolean("all_day").notNull().default(false),
+  timezone: text("timezone"),
+  recurrenceMasterId: text("recurrence_master_id"),
+  recurrenceRule: text("recurrence_rule"),
+  status: text("status").notNull().default("CONFIRMED"),
+  category: text("category").notNull(),
+  propertyId: uuid("property_id"),
+  bookingId: uuid("booking_id"),
+  originActorType: principalType("origin_actor_type").notNull().default("SYSTEM"),
+  originActorId: text("origin_actor_id"),
+  sourceUpdatedAt: timestamp("source_updated_at", { withTimezone: true }),
+  normalizedAt: timestamp("normalized_at", { withTimezone: true }).notNull().defaultNow(),
+  localVersion: integer("local_version").notNull().default(1),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow()
+}, (t) => [
+  uniqueIndex("calendar_event_provider_unique").on(
+    t.workspaceId,
+    t.calendarSourceId,
+    t.providerEventId
+  ),
+  index("calendar_event_workspace_time_idx").on(t.workspaceId, t.startAt),
+  index("calendar_event_workspace_date_idx").on(t.workspaceId, t.startDate)
+]);
+
+export const syncCursor = pgTable("sync_cursor", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  workspaceId: text("workspace_id").notNull(),
+  connectorAccountId: uuid("connector_account_id").notNull(),
+  resourceType: text("resource_type").notNull(),
+  resourceScope: text("resource_scope").notNull(),
+  cursorType: text("cursor_type").notNull(),
+  cursorValueProtected: text("cursor_value_protected").notNull(),
+  validFrom: timestamp("valid_from", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow()
+}, (t) => [
+  uniqueIndex("sync_cursor_resource_unique").on(
+    t.workspaceId,
+    t.connectorAccountId,
+    t.resourceType,
+    t.resourceScope
+  )
+]);
+
+export const syncRun = pgTable("sync_run", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  workspaceId: text("workspace_id").notNull(),
+  connectorAccountId: uuid("connector_account_id").notNull(),
+  mode: text("mode").notNull(),
+  status: text("status").notNull(),
+  startedAt: timestamp("started_at", { withTimezone: true }).notNull().defaultNow(),
+  completedAt: timestamp("completed_at", { withTimezone: true }),
+  itemsSeen: integer("items_seen").notNull().default(0),
+  itemsCreated: integer("items_created").notNull().default(0),
+  itemsUpdated: integer("items_updated").notNull().default(0),
+  itemsDeleted: integer("items_deleted").notNull().default(0),
+  failureCode: text("failure_code")
+}, (t) => [
+  index("sync_run_workspace_started_idx").on(t.workspaceId, t.startedAt)
+]);
 
 export const actionIntent = pgTable("action_intent", {
   id: uuid("id").primaryKey().defaultRandom(),
