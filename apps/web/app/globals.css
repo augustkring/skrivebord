@@ -1,0 +1,26 @@
+@import "tailwindcss";
+
+:root {
+  --surface-base: #f6f7f5;
+  --surface-raised: #ffffff;
+  --surface-muted: #eef0ed;
+  --text-primary: #17211b;
+  --text-secondary: #526158;
+  --text-muted: #78837c;
+  --border-default: #dfe4df;
+  --border-strong: #c6cec8;
+  --action-primary: #153e2e;
+  --action-primary-hover: #0e3023;
+  --status-info: #315e8a;
+  --status-success: #2b6c4d;
+  --status-warning: #8d6019;
+  --status-critical: #9f3a38;
+  --focus-ring: #2f6f50;
+}
+
+* { box-sizing: border-box; }
+html { background: var(--surface-base); }
+body { margin: 0; color: var(--text-primary); background: var(--surface-base); font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+button, input, textarea { font: inherit; }
+a { color: inherit; text-decoration: none; }
+:focus-visible { outline: 3px solid color-mix(in srgb, var(--focus-ring) 55%, transparent); outline-offset: 2px; }

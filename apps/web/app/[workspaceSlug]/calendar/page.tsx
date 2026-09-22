@@ -1,0 +1,7 @@
+import { buildAlsLebenSnapshot } from "@skrivebord/domain";
+import { PageTitle } from "../_components/page-title";
+
+export default function CalendarPage() {
+  const { calendarEvents } = buildAlsLebenSnapshot();
+  return <><PageTitle title="Kalender" subtitle="Normaliseret driftskalender med tydelig kilde og ejerskab. Fuldt provider-sync kommer i kalenderfasen; denne build bruger samme eventmodel som connectorlaget."/><div className="mb-4 flex gap-2 text-sm"><button className="rounded-md border border-[var(--border-strong)] bg-white px-3 py-2">I dag</button><button className="rounded-md border border-[var(--border-default)] px-3 py-2">Måned</button><button className="rounded-md px-3 py-2 text-[var(--text-secondary)]">Uge</button><button className="rounded-md px-3 py-2 text-[var(--text-secondary)]">Liste</button></div><div className="overflow-hidden rounded-xl border border-[var(--border-default)] bg-white">{calendarEvents.map((event) => <article key={event.id} className="grid gap-2 border-b border-[var(--border-default)] p-4 last:border-b-0 sm:grid-cols-[150px_1fr_140px] sm:items-center"><div className="text-sm font-medium">{event.startLabel}</div><div><div className="font-medium">{event.title}</div><div className="mt-1 text-sm text-[var(--text-secondary)]">{event.categoryLabel}</div></div><div className="text-sm text-[var(--text-muted)] sm:text-right">{event.sourceLabel}</div></article>)}</div></>;
+}
