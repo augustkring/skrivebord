@@ -27,7 +27,13 @@ export const agentProfile = pgTable("agent_profile", {
   lastSeenAt: timestamp("last_seen_at", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow()
-}, (t) => [index("agent_workspace_idx").on(t.workspaceId)]);
+}, (t) => [
+  index("agent_workspace_idx").on(t.workspaceId),
+  uniqueIndex("agent_profile_workspace_runtime_unique").on(
+    t.workspaceId,
+    t.runtimeAgentKey
+  )
+]);
 
 
 export const property = pgTable("property", {
