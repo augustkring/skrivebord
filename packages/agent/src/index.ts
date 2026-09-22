@@ -5,11 +5,11 @@ import {
   type OperationalSnapshot,
   type YearPlanItem
 } from "@skrivebord/domain";
-import { CAPABILITIES, hasCapabilities } from "@skrivebord/policy";
+import { CAPABILITIES, hasCapabilities, type Capability } from "@skrivebord/policy";
 
 const capabilitySet = new Set<string>(CAPABILITIES);
 
-export function normalizeAgentCapabilities(value: unknown): string[] {
+export function normalizeAgentCapabilities(value: unknown): Capability[] {
   let source = value;
 
   if (typeof source === "string") {
@@ -26,7 +26,7 @@ export function normalizeAgentCapabilities(value: unknown): string[] {
   if (!Array.isArray(raw)) return [];
 
   return raw.filter(
-    (item): item is string =>
+    (item): item is Capability =>
       typeof item === "string" && capabilitySet.has(item)
   );
 }
