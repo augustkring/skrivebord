@@ -2,6 +2,8 @@ import { createHash } from "node:crypto";
 import type { SkrivebordDatabase } from "./client";
 import {
   booking,
+  calendarEvent,
+  calendarSource,
   property,
   yearPlanItem
 } from "./schema";
@@ -105,6 +107,77 @@ export async function seedAlsLebenPilotData(
         checkInAt: arrivalThree,
         checkOutAt: departureThree,
         status: "ACTIVE"
+      }
+    ])
+    .onConflictDoNothing();
+
+  const sourceId = stableUuid(`${workspaceId}:calendar-source:operations`);
+
+  await db
+    .insert(calendarSource)
+    .values({
+      id: sourceId,
+      workspaceId,
+      provider: "SKRIVEBORD",
+      providerCalendarId: "operations",
+      displayName: "Drift",
+      writable: true,
+      syncState: "HEALTHY",
+      lastSyncedAt: now
+    })
+    .onConflictDoNothing();
+
+  await db
+    .insert(calendarEvent)
+    .values([
+      {
+        id: stableUuid(`${workspaceId}:calendar:cleaning`),
+        workspaceId,
+        calendarSourceId: sourceId,
+        providerEventId: "pilot-cleaning",
+        title: "Rengøring · Havnehuset",
+        startAt: new Date(now.getTime() + 24 * 60 * 60 * 1000),
+        endAt: new Date(now.getTime() + 26 * 60 * 60 * 1000),
+        allDay: false,
+        timezone: "Europe/Copenhagen",
+        category: "TURNOVER",
+        propertyId: harborPropertyId,
+        originActorType: "SYSTEM",
+        originActorId: "pilot-seed",
+        sourceUpdatedAt: now
+      },
+      {
+        id: stableUuid(`${workspaceId}:calendar:arrival-anna`),
+        workspaceId,
+        calendarSourceId: sourceId,
+        providerEventId: "pilot-arrival-anna",
+        title: "Anna Jensen ankommer",
+        startAt: arrivalOne,
+        endAt: new Date(arrivalOne.getTime() + 60 * 60 * 1000),
+        allDay: false,
+        timezone: "Europe/Copenhagen",
+        category: "BOOKING",
+        propertyId: harborPropertyId,
+        bookingId: stableUuid(`${workspaceId}:booking:anna`),
+        originActorType: "SYSTEM",
+        originActorId: "pilot-seed",
+        sourceUpdatedAt: now
+      },
+      {
+        id: stableUuid(`${workspaceId}:calendar:heat-pump`),
+        workspaceId,
+        calendarSourceId: sourceId,
+        providerEventId: "pilot-heat-pump",
+        title: "Service på varmepumpe",
+        startAt: new Date(now.getTime() + 72 * 60 * 60 * 1000),
+        endAt: new Date(now.getTime() + 74 * 60 * 60 * 1000),
+        allDay: false,
+        timezone: "Europe/Copenhagen",
+        category: "MAINTENANCE",
+        propertyId: forestPropertyId,
+        originActorType: "SYSTEM",
+        originActorId: "pilot-seed",
+        sourceUpdatedAt: now
       }
     ])
     .onConflictDoNothing();
