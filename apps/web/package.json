@@ -31,7 +31,8 @@
     "zod": "4.6.5",
     "@modelcontextprotocol/server": "2.0.0",
     "@skrivebord/agent": "workspace:*",
-    "mcp-handler": "2.2.0"
+    "mcp-handler": "2.2.0",
+    "@skrivebord/connectors": "workspace:*"
   },
   "devDependencies": {
     "@types/pg": "8.23.1"
