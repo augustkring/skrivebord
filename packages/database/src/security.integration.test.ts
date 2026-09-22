@@ -17,13 +17,16 @@ import {
   calendarEvent,
   calendarSource,
   connectorAccount,
+  connectorCredential,
   createCompleteWorkItemAction,
   createDatabasePool,
   listTodayItems,
   persistCalendarSync,
   PostgresActionStore,
   recomputeToday,
+  readConnectorCredential,
   seedAlsLebenPilotData,
+  storeConnectorCredential,
   syncCursor,
   withPrincipalTransaction,
   workItem,
@@ -35,11 +38,12 @@ const describeDatabase = databaseUrl ? describe : describe.skip;
 
 function principal(
   workspaceId: string,
-  requestId: string
+  requestId: string,
+  principalType: PrincipalContext["principalType"] = "SYSTEM"
 ): PrincipalContext {
   return {
-    principalId: "system:database-test",
-    principalType: "SYSTEM",
+    principalId: `${principalType.toLowerCase()}:database-test`,
+    principalType,
     workspaceId,
     roles: [],
     capabilities: ["workspace.read", "today.read", "today.manage"],
@@ -355,6 +359,81 @@ describeDatabase("database tenant isolation", () => {
     expect(stored.cursor?.cursorValueProtected).not.toBe(
       "raw-sync-token"
     );
+  });
+
+
+  it("keeps connector credential payloads invisible to HUMAN and AGENT principals", async () => {
+    const system = principal(
+      workspaceA,
+      "credential-write",
+      "SYSTEM"
+    );
+
+    const connectorAccountId = await withPrincipalTransaction(
+      pool,
+      system,
+      async ({ db }) => {
+        const [account] = await db
+          .insert(connectorAccount)
+          .values({
+            workspaceId: workspaceA,
+            provider: "GOOGLE",
+            displayName: "Credential isolation account",
+            providerAccountId: `credential-isolation-${suffix}`,
+            status: "CONNECTED",
+            scopes: ["calendar.events"],
+            connectedBy: system.principalId
+          })
+          .returning({ id: connectorAccount.id });
+
+        if (!account) {
+          throw new Error("CONNECTOR_ACCOUNT_CREATE_FAILED");
+        }
+
+        await storeConnectorCredential(db, {
+          workspaceId: workspaceA,
+          connectorAccountId: account.id,
+          encryptedPayload: "v1.k1.fake-protected-payload",
+          keyId: "k1"
+        });
+
+        const stored = await readConnectorCredential(db, {
+          workspaceId: workspaceA,
+          connectorAccountId: account.id
+        });
+
+        expect(stored?.encryptedPayload).toBe(
+          "v1.k1.fake-protected-payload"
+        );
+
+        return account.id;
+      }
+    );
+
+    for (const principalType of ["HUMAN", "AGENT"] as const) {
+      const rows = await withPrincipalTransaction(
+        pool,
+        principal(
+          workspaceA,
+          `credential-read-${principalType.toLowerCase()}`,
+          principalType
+        ),
+        ({ db }) =>
+          db
+            .select({
+              encryptedPayload: connectorCredential.encryptedPayload
+            })
+            .from(connectorCredential)
+            .where(
+              eq(
+                connectorCredential.connectorAccountId,
+                connectorAccountId
+              )
+            )
+      );
+
+      expect(rows).toEqual([]);
+    }
   });
 
   it("keeps audit append-only for the application role", async () => {
