@@ -22,6 +22,8 @@ create index "account_userId_idx" on "account" ("userId");
 
 create index "verification_identifier_idx" on "verification" ("identifier");
 
+create unique index "organization_slug_uidx" on "organization" ("slug");
+
 create index "member_organizationId_idx" on "member" ("organizationId");
 
 create index "member_userId_idx" on "member" ("userId");
