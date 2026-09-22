@@ -157,6 +157,8 @@ importers:
         specifier: workspace:*
         version: link:../policy
 
+  packages/connectors: {}
+
   packages/contracts:
     dependencies:
       zod:
