@@ -129,6 +129,18 @@ export const connectorAccount = pgTable("connector_account", {
   index("connector_account_workspace_idx").on(t.workspaceId)
 ]);
 
+
+export const connectorCredential = pgTable("connector_credential", {
+  connectorAccountId: uuid("connector_account_id").primaryKey(),
+  workspaceId: text("workspace_id").notNull(),
+  encryptedPayload: text("encrypted_payload").notNull(),
+  keyId: text("key_id").notNull(),
+  expiresAt: timestamp("expires_at", { withTimezone: true }),
+  rotatedAt: timestamp("rotated_at", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow()
+});
+
 export const calendarSource = pgTable("calendar_source", {
   id: uuid("id").primaryKey().defaultRandom(),
   workspaceId: text("workspace_id").notNull(),
