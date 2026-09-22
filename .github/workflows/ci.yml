@@ -5,6 +5,9 @@ on:
   push:
     branches: [main, "build/**"]
 
+permissions:
+  contents: write
+
 jobs:
   verify:
     runs-on: ubuntu-latest
@@ -28,6 +31,8 @@ jobs:
       BETTER_AUTH_URL: http://localhost:3000
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.head_ref || github.ref_name }}
       - uses: pnpm/action-setup@v4
         with:
           version: 10.17.1
@@ -35,21 +40,23 @@ jobs:
         with:
           node-version: 24
       - run: pnpm install --no-frozen-lockfile
-      - uses: actions/upload-artifact@v4
-        with:
-          name: pnpm-lock
-          path: pnpm-lock.yaml
-          retention-days: 1
       - name: Generate Better Auth schema
         run: |
           mkdir -p generated
           pnpm dlx auth@1.7.5 generate --config apps/web/lib/auth.ts --output generated/better-auth.sql --yes
-      - uses: actions/upload-artifact@v4
-        with:
-          name: better-auth-schema
-          path: generated/better-auth.sql
-          retention-days: 1
+          cp generated/better-auth.sql drizzle/0002_better_auth.sql
       - run: pnpm lint
       - run: pnpm typecheck
       - run: pnpm test
       - run: pnpm build
+      - name: Commit tested lockfile and auth schema
+        if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
+        run: |
+          if git diff --quiet -- pnpm-lock.yaml drizzle/0002_better_auth.sql && git ls-files --error-unmatch pnpm-lock.yaml drizzle/0002_better_auth.sql >/dev/null 2>&1; then
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add pnpm-lock.yaml drizzle/0002_better_auth.sql
+          git commit -m "chore: lock tested auth dependencies and schema"
+          git push origin HEAD:${{ github.head_ref }}
