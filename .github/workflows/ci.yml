@@ -51,6 +51,23 @@ jobs:
             echo "Applying $file"
             psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f "$file"
           done
+      - name: Create limited application role
+        run: |
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 <<'SQL'
+          create role skrivebord_app
+            login
+            password 'skrivebord_app'
+            nosuperuser
+            nocreatedb
+            nocreaterole
+            noinherit;
+          grant connect on database skrivebord to skrivebord_app;
+          grant usage on schema public to skrivebord_app;
+          grant select, insert, update, delete on all tables in schema public to skrivebord_app;
+          grant usage, select on all sequences in schema public to skrivebord_app;
+          revoke update, delete on audit_event from skrivebord_app;
+          SQL
+          echo "DATABASE_TEST_URL=postgresql://skrivebord_app:skrivebord_app@127.0.0.1:5432/skrivebord" >> "$GITHUB_ENV"
       - run: pnpm lint
       - run: pnpm typecheck
       - run: pnpm test
