@@ -45,6 +45,12 @@ jobs:
           mkdir -p generated
           pnpm dlx auth@1.6.17 generate --config apps/web/lib/auth.ts --output generated/better-auth.sql --yes
           cp generated/better-auth.sql drizzle/0002_better_auth.sql
+      - name: Run migration smoke
+        run: |
+          for file in drizzle/*.sql; do
+            echo "Applying $file"
+            psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f "$file"
+          done
       - run: pnpm lint
       - run: pnpm typecheck
       - run: pnpm test
