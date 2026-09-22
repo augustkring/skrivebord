@@ -1,4 +1,5 @@
 import {
+  getAgentProvisioningState,
   getGoogleConnection,
   withPrincipalTransaction
 } from "@skrivebord/database";
@@ -8,6 +9,7 @@ import { databasePool } from "@/lib/database";
 import { resolveWorkspaceHumanPrincipal } from "@/lib/principal";
 import { PageTitle } from "../_components/page-title";
 import { GoogleSyncButton } from "./_components/google-sync-button";
+import { MojnProvisioning } from "./_components/mojn-provisioning";
 import { PasskeySecurity } from "./_components/passkey-security";
 
 export const dynamic = "force-dynamic";
@@ -45,15 +47,32 @@ export default async function SettingsPage({
 
   if (!principal) redirect("/sign-in");
 
-  const google = await withPrincipalTransaction(
+  const state = await withPrincipalTransaction(
     databasePool,
     principal,
-    ({ db }) =>
-      getGoogleConnection(db, principal.workspaceId)
+    async ({ db }) => ({
+      google: await getGoogleConnection(
+        db,
+        principal.workspaceId
+      ),
+      mojn: await getAgentProvisioningState(
+        db,
+        {
+          workspaceId:
+            principal.workspaceId,
+          runtimeAgentKey: "mojn"
+        }
+      )
+    })
   );
+
+  const google = state.google;
+  const mojn = state.mojn;
 
   const canManageConnections =
     principal.capabilities.includes("connection.manage");
+  const canManageAgent =
+    principal.capabilities.includes("agent.policy.manage");
   const oauthConfigured = Boolean(
     process.env.GOOGLE_CLIENT_ID &&
       process.env.GOOGLE_CLIENT_SECRET &&
@@ -152,8 +171,35 @@ export default async function SettingsPage({
         <section className="py-5">
           <h2 className="font-semibold">Mojn</h2>
           <p className="mt-1 text-sm leading-6 text-[var(--text-secondary)]">
-            Aktiveret · capabilities håndhæves server-side gennem samme policy- og Action Layer som menneskelige handlinger.
+            Mojn er en selvstændig AGENT-principal. MCP-adgang kræver både en gyldig org-key og en aktiv agent-binding.
           </p>
+          <MojnProvisioning
+            workspaceSlug={workspaceSlug}
+            canManage={canManageAgent}
+            existing={
+              mojn?.enabled &&
+              mojn.activeCredential
+                ? {
+                    agentId:
+                      mojn.agentId,
+                    name: mojn.name,
+                    expiresAt:
+                      mojn.activeCredential
+                        .expiresAt
+                        ?.toISOString() ??
+                      null,
+                    lastUsedAt:
+                      mojn.activeCredential
+                        .lastUsedAt
+                        ?.toISOString() ??
+                      null,
+                    capabilities:
+                      mojn.activeCredential
+                        .capabilities
+                  }
+                : null
+            }
+          />
         </section>
 
         <section className="py-5">
