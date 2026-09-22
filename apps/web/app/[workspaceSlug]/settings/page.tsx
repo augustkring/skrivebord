@@ -7,6 +7,7 @@ import { redirect } from "next/navigation";
 import { databasePool } from "@/lib/database";
 import { resolveWorkspaceHumanPrincipal } from "@/lib/principal";
 import { PageTitle } from "../_components/page-title";
+import { GoogleSyncButton } from "./_components/google-sync-button";
 import { PasskeySecurity } from "./_components/passkey-security";
 
 export const dynamic = "force-dynamic";
@@ -123,15 +124,22 @@ export default async function SettingsPage({
 
             {canManageConnections ? (
               oauthConfigured ? (
-                <a
-                  href={`/api/connections/google/start?workspaceSlug=${encodeURIComponent(workspaceSlug)}`}
-                  className="inline-flex items-center gap-2 self-start rounded-md border border-[var(--border-strong)] bg-white px-3 py-2 text-sm font-semibold hover:bg-[var(--surface-muted)]"
-                >
-                  <ExternalLink size={15} aria-hidden="true" />
-                  {google
-                    ? "Forbind Google igen"
-                    : "Forbind Google Calendar"}
-                </a>
+                <div className="flex flex-col items-start gap-2">
+                  <a
+                    href={`/api/connections/google/start?workspaceSlug=${encodeURIComponent(workspaceSlug)}`}
+                    className="inline-flex items-center gap-2 self-start rounded-md border border-[var(--border-strong)] bg-white px-3 py-2 text-sm font-semibold hover:bg-[var(--surface-muted)]"
+                  >
+                    <ExternalLink size={15} aria-hidden="true" />
+                    {google
+                      ? "Forbind Google igen"
+                      : "Forbind Google Calendar"}
+                  </a>
+                  {google ? (
+                    <GoogleSyncButton
+                      workspaceSlug={workspaceSlug}
+                    />
+                  ) : null}
+                </div>
               ) : (
                 <span className="self-start text-xs text-[var(--status-warning)]">
                   Google OAuth er ikke konfigureret i miljøet.
