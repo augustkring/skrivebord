@@ -8,8 +8,10 @@ import { magicLinkClient, organizationClient } from "better-auth/client/plugins"
 export const authClient = createAuthClient({
   plugins: [
     organizationClient(),
-    apiKeyClient({ configId: "agent-keys" }),
+    apiKeyClient(),
     passkeyClient(),
     magicLinkClient()
   ]
 });
+
+export const AGENT_API_KEY_CONFIG_ID = "agent-keys";
