@@ -243,6 +243,28 @@ export const syncRun = pgTable("sync_run", {
   index("sync_run_workspace_started_idx").on(t.workspaceId, t.startedAt)
 ]);
 
+
+export const agentRun = pgTable("agent_run", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  workspaceId: text("workspace_id").notNull(),
+  agentId: uuid("agent_id"),
+  runtimeType: text("runtime_type").notNull().default("OPENCLAW"),
+  runtimeAgentKey: text("runtime_agent_key").notNull(),
+  gatewayRunId: text("gateway_run_id").notNull(),
+  sessionKey: text("session_key").notNull(),
+  requestedByPrincipalId: text("requested_by_principal_id").notNull(),
+  routeContext: text("route_context"),
+  status: text("status").notNull().default("ACCEPTED"),
+  acceptedAt: timestamp("accepted_at", { withTimezone: true }).notNull().defaultNow(),
+  completedAt: timestamp("completed_at", { withTimezone: true }),
+  errorCode: text("error_code"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow()
+}, (t) => [
+  uniqueIndex("agent_run_gateway_unique").on(t.workspaceId, t.gatewayRunId),
+  index("agent_run_workspace_created_idx").on(t.workspaceId, t.createdAt)
+]);
+
 export const actionIntent = pgTable("action_intent", {
   id: uuid("id").primaryKey().defaultRandom(),
   workspaceId: text("workspace_id").notNull(),
