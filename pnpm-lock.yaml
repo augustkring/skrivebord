@@ -170,6 +170,9 @@ importers:
       '@skrivebord/actions':
         specifier: workspace:*
         version: link:../actions
+      '@skrivebord/connectors':
+        specifier: workspace:*
+        version: link:../connectors
       '@skrivebord/contracts':
         specifier: workspace:*
         version: link:../contracts
