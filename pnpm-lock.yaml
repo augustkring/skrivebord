@@ -71,6 +71,9 @@ importers:
       '@skrivebord/auth':
         specifier: workspace:*
         version: link:../../packages/auth
+      '@skrivebord/connectors':
+        specifier: workspace:*
+        version: link:../../packages/connectors
       '@skrivebord/contracts':
         specifier: workspace:*
         version: link:../../packages/contracts
