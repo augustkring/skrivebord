@@ -2,6 +2,7 @@ import { executeAction } from "@skrivebord/actions";
 import type { PrincipalContext } from "@skrivebord/contracts";
 import {
   createCompleteWorkItemAction,
+  getActionStatus,
   listCalendarEvents,
   listTodayItems,
   listYearPlanItems,
@@ -456,7 +457,7 @@ function buildHandler(principal: PrincipalContext) {
 
       if (has(principal, "calendar.update")) {
         server.registerTool(
-          "calendar.move",
+          "calendar.move_event",
           {
             title: "Flyt kalenderbegivenhed",
             description:
@@ -550,6 +551,183 @@ function buildHandler(principal: PrincipalContext) {
                     "PENDING_APPROVAL"
                       ? `${result.humanSummary} Afventer menneskelig godkendelse.`
                       : result.humanSummary
+                }
+              ],
+              structuredContent:
+                output
+            };
+          }
+        );
+      }
+
+
+      if (has(principal, "activity.read")) {
+        server.registerTool(
+          "actions.get_status",
+          {
+            title: "Hent handlingsstatus",
+            description:
+              "Henter status for en handling, som denne agent selv har anmodet om i det aktive workspace.",
+            inputSchema: z.object({
+              actionId:
+                z.string().uuid()
+            }),
+            outputSchema: z.object({
+              status: z.enum([
+                "PENDING",
+                "WAITING_APPROVAL",
+                "QUEUED",
+                "RUNNING",
+                "SUCCEEDED",
+                "PARTIAL",
+                "FAILED",
+                "CANCELLED",
+                "ROLLED_BACK"
+              ]),
+              humanSummary:
+                z.string(),
+              actionId:
+                z.string().uuid(),
+              actionType:
+                z.string(),
+              approval: z.object({
+                id:
+                  z.string().uuid(),
+                state:
+                  z.string(),
+                expiresAt:
+                  z.string()
+              }).optional(),
+              execution: z.object({
+                id:
+                  z.string().uuid(),
+                state:
+                  z.string(),
+                attemptCount:
+                  z.number().int(),
+                errorCode:
+                  z.string().nullable(),
+                retryable:
+                  z.boolean(),
+                externalEffectRefs:
+                  z.array(z.string())
+              }).optional()
+            }),
+            annotations: {
+              readOnlyHint: true
+            }
+          },
+          async ({ actionId }) => {
+            const state =
+              await withPrincipalTransaction(
+                databasePool,
+                principal,
+                ({ db }) =>
+                  getActionStatus(
+                    db,
+                    {
+                      workspaceId:
+                        principal.workspaceId,
+                      actionIntentId:
+                        actionId,
+                      requestedByPrincipalId:
+                        principal.principalId
+                    }
+                  )
+              );
+
+            if (!state) {
+              return {
+                isError: true,
+                content: [
+                  {
+                    type: "text",
+                    text:
+                      "Handlingen blev ikke fundet."
+                  }
+                ]
+              };
+            }
+
+            const externalEffectRefs =
+              Array.isArray(
+                state.execution
+                  ?.externalEffectRefs
+              )
+                ? state.execution!
+                    .externalEffectRefs
+                    .filter(
+                      (
+                        value
+                      ): value is string =>
+                        typeof value ===
+                        "string"
+                    )
+                : [];
+
+            const humanSummary =
+              state.state ===
+              "WAITING_APPROVAL"
+                ? `${state.humanSummary} Afventer menneskelig godkendelse.`
+                : state.state ===
+                    "SUCCEEDED"
+                  ? `${state.humanSummary} Gennemført.`
+                  : state.state ===
+                      "FAILED"
+                    ? `${state.humanSummary} Fejlede.`
+                    : state.humanSummary;
+
+            const output = {
+              status:
+                state.state,
+              humanSummary,
+              actionId:
+                state.id,
+              actionType:
+                state.actionId,
+              ...(state.approval
+                ? {
+                    approval: {
+                      id:
+                        state.approval.id,
+                      state:
+                        state.approval.state,
+                      expiresAt:
+                        state.approval
+                          .expiresAt
+                          .toISOString()
+                    }
+                  }
+                : {}),
+              ...(state.execution
+                ? {
+                    execution: {
+                      id:
+                        state.execution.id,
+                      state:
+                        state.execution.state,
+                      attemptCount:
+                        state.execution
+                          .attemptCount,
+                      errorCode:
+                        state.execution
+                          .errorCode ??
+                        null,
+                      retryable:
+                        state.execution
+                          .retryable,
+                      externalEffectRefs
+                    }
+                  }
+                : {})
+            };
+
+            return {
+              content: [
+                {
+                  type: "text",
+                  text:
+                    output.humanSummary
                 }
               ],
               structuredContent:
