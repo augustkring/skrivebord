@@ -4,6 +4,7 @@ import {
   resolveApproval
 } from "@skrivebord/actions";
 import {
+  getActionStatus,
   getApprovalIntent,
   markActionIntentApproved,
   persistCalendarWriteResult,
@@ -148,69 +149,116 @@ export async function POST(
     );
   }
 
-  const resolved =
-    await resolveApproval({
-      store,
-      approvalId,
-      principal,
-      decision:
-        parsed.data.decision,
-      currentParameters:
-        intent.parameters,
-      currentTargetFingerprint:
-        intent.targetFingerprint
-    });
+  let approvalGranted =
+    false;
 
   if (
-    resolved.status ===
-    "REJECTED"
+    parsed.data.decision ===
+      "APPROVE" &&
+    intent.approvalState ===
+      "APPROVED"
   ) {
-    await store.updateIntentState(
-      intent.actionIntentId,
-      "CANCELLED"
-    );
+    const actionStatus =
+      await withPrincipalTransaction(
+        databasePool,
+        principal,
+        ({ db }) =>
+          getActionStatus(
+            db,
+            {
+              workspaceId:
+                principal.workspaceId,
+              actionIntentId:
+                intent.actionIntentId
+            }
+          )
+      );
 
-    return Response.json({
-      status: "REJECTED",
-      humanSummary:
-        "Handlingen blev afvist."
-    });
-  }
+    if (
+      actionStatus?.state ===
+        "FAILED" &&
+      actionStatus.execution
+        ?.retryable
+    ) {
+      approvalGranted = true;
+    } else {
+      return Response.json(
+        {
+          status:
+            "ALREADY_RESOLVED",
+          humanSummary:
+            "Godkendelsen er allerede afgjort."
+        },
+        { status: 409 }
+      );
+    }
+  } else {
+    const resolved =
+      await resolveApproval({
+        store,
+        approvalId,
+        principal,
+        decision:
+          parsed.data.decision,
+        currentParameters:
+          intent.parameters,
+        currentTargetFingerprint:
+          intent.targetFingerprint
+      });
 
-  if (
-    resolved.status !==
-    "APPROVED"
-  ) {
-    return Response.json(
-      {
-        status:
-          resolved.status,
+    if (
+      resolved.status ===
+      "REJECTED"
+    ) {
+      await store.updateIntentState(
+        intent.actionIntentId,
+        "CANCELLED"
+      );
+
+      return Response.json({
+        status: "REJECTED",
         humanSummary:
-          resolved.status ===
-          "SUPERSEDED"
-            ? "Handlingen har ændret sig og kræver en ny godkendelse."
-            : resolved.status ===
-                "EXPIRED"
-              ? "Godkendelsen er udløbet."
+          "Handlingen blev afvist."
+      });
+    }
+
+    if (
+      resolved.status !==
+      "APPROVED"
+    ) {
+      return Response.json(
+        {
+          status:
+            resolved.status,
+          humanSummary:
+            resolved.status ===
+            "SUPERSEDED"
+              ? "Handlingen har ændret sig og kræver en ny godkendelse."
               : resolved.status ===
-                  "ALREADY_RESOLVED"
-                ? "Godkendelsen er allerede afgjort."
+                  "EXPIRED"
+                ? "Godkendelsen er udløbet."
                 : resolved.status ===
-                    "DENIED"
-                  ? resolved.reason
-                  : "Godkendelsen blev ikke fundet."
-      },
-      {
-        status:
-          resolved.status ===
-          "DENIED"
-            ? 403
-            : resolved.status ===
-                "NOT_FOUND"
-              ? 404
-              : 409
-      }
-    );
+                    "ALREADY_RESOLVED"
+                  ? "Godkendelsen er allerede afgjort."
+                  : resolved.status ===
+                      "DENIED"
+                    ? resolved.reason
+                    : "Godkendelsen blev ikke fundet."
+        },
+        {
+          status:
+            resolved.status ===
+            "DENIED"
+              ? 403
+              : resolved.status ===
+                  "NOT_FOUND"
+                ? 404
+                : 409
+        }
+      );
+    }
+
+    approvalGranted = true;
   }
 
   await withPrincipalTransaction(
@@ -241,7 +289,7 @@ export async function POST(
         intent.idempotencyKey ??
         `approval:${approvalId}`,
       approvalId,
-      approvalGranted: true,
+      approvalGranted,
       existingIntentId:
         intent.actionIntentId,
       store
