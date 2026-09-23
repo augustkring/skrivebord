@@ -295,6 +295,7 @@ export const actionIntent = pgTable("action_intent", {
   id: uuid("id").primaryKey().defaultRandom(),
   workspaceId: text("workspace_id").notNull(),
   actionId: text("action_id").notNull(),
+  idempotencyKey: text("idempotency_key"),
   requestedByPrincipalId: text("requested_by_principal_id").notNull(),
   requestedByPrincipalType: principalType("requested_by_principal_type").notNull(),
   targetType: text("target_type"),
@@ -307,7 +308,13 @@ export const actionIntent = pgTable("action_intent", {
   state: actionState("state").notNull().default("PENDING"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   expiresAt: timestamp("expires_at", { withTimezone: true })
-}, (t) => [index("action_intent_workspace_idx").on(t.workspaceId)]);
+}, (t) => [
+  index("action_intent_workspace_idx").on(t.workspaceId),
+  uniqueIndex("action_intent_workspace_idempotency_unique").on(
+    t.workspaceId,
+    t.idempotencyKey
+  ).where(sql`${t.idempotencyKey} is not null`)
+]);
 
 
 export const actionExecution = pgTable("action_execution", {
