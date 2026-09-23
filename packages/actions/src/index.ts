@@ -349,6 +349,7 @@ export async function executeAction<Input, Result>(args: {
   now?: Date;
   explicitlyDelegated?: boolean;
   idempotencyKey?: string;
+  approvalId?: string;
 }): Promise<ToolResult<Result>> {
   const parsed = args.definition.input.safeParse(args.rawInput);
   if (!parsed.success) {
@@ -422,12 +423,20 @@ export async function executeAction<Input, Result>(args: {
     createdAt: now.toISOString()
   });
 
-  const baseAudit = auditBase(
-    args.principal,
-    args.definition.id,
-    id,
-    now.toISOString()
-  );
+  const baseAudit = {
+    ...auditBase(
+      args.principal,
+      args.definition.id,
+      id,
+      now.toISOString()
+    ),
+    ...(args.approvalId
+      ? {
+          approvalId:
+            args.approvalId
+        }
+      : {})
+  };
 
   if (decision.type === "DENY") {
     await args.store.appendAudit({
