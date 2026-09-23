@@ -1,6 +1,7 @@
 import type {
   ActionExecutionClaim,
   ActionExecutionRecord,
+  ActionIntentClaim,
   ActionIntentRecord,
   ActionIntentState,
   ActionStore,
@@ -38,6 +39,14 @@ export class TransactionalPostgresActionStore
 
   createIntent(intent: ActionIntentRecord): Promise<void> {
     return this.run((store) => store.createIntent(intent));
+  }
+
+  claimIntent(
+    intent: ActionIntentRecord
+  ): Promise<ActionIntentClaim> {
+    return this.run((store) =>
+      store.claimIntent(intent)
+    );
   }
 
   updateIntentState(
