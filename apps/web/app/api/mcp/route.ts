@@ -72,9 +72,14 @@ const calendarEventSchema = z.object({
   endDate: z.string().nullable(),
   allDay: z.boolean(),
   timezone: z.string().nullable(),
+  recurrenceMasterId:
+    z.string().nullable(),
+  recurrenceRule:
+    z.string().nullable(),
   status: z.string(),
   provider: z.string(),
   sourceName: z.string(),
+  writable: z.boolean(),
   syncState: z.string()
 });
 
@@ -147,10 +152,18 @@ function mapCalendarEvent(
     allDay: event.allDay,
     timezone:
       event.timezone ?? null,
+    recurrenceMasterId:
+      event.recurrenceMasterId ??
+      null,
+    recurrenceRule:
+      event.recurrenceRule ??
+      null,
     status: event.status,
     provider: event.provider,
     sourceName:
       event.sourceName,
+    writable:
+      event.writable,
     syncState:
       event.syncState
   };
