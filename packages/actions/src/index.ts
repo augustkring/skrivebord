@@ -462,16 +462,24 @@ export async function executeAction<Input, Result>(args: {
     externalCommunication: args.definition.externalCommunication
   });
 
-  const id = newId();
+  let id = newId();
   const summary = args.definition.preview
     ? await args.definition.preview(ctx)
     : args.definition.id;
   const parametersDigest = digestParameters(parsed.data);
+  const intentIdempotencyKey =
+    args.idempotencyKey?.trim();
 
-  await args.store.createIntent({
+  const intent: ActionIntentRecord = {
     id,
     workspaceId: args.principal.workspaceId,
     actionId: args.definition.id,
+    ...(intentIdempotencyKey
+      ? {
+          idempotencyKey:
+            intentIdempotencyKey
+        }
+      : {}),
     requestedByPrincipalId: args.principal.principalId,
     requestedByPrincipalType: args.principal.principalType,
     parameters: parsed.data,
@@ -486,7 +494,108 @@ export async function executeAction<Input, Result>(args: {
           ? "FAILED"
           : "PENDING",
     createdAt: now.toISOString()
-  });
+  };
+
+  if (intentIdempotencyKey) {
+    const intentClaim =
+      await args.store.claimIntent(
+        intent
+      );
+
+    id = intentClaim.intentId;
+
+    if (
+      intentClaim.type ===
+      "KEY_REUSED"
+    ) {
+      return {
+        status: "CONFLICT",
+        humanSummary:
+          "Idempotency-keyen er allerede brugt til en anden handling.",
+        actionId: id
+      };
+    }
+
+    if (
+      intentClaim.type ===
+      "EXISTING"
+    ) {
+      if (
+        intentClaim.state ===
+        "WAITING_APPROVAL"
+      ) {
+        const approval =
+          await args.store.getPendingApprovalByIntent?.(
+            id
+          );
+
+        return {
+          status:
+            "PENDING_APPROVAL",
+          humanSummary: summary,
+          actionId: id,
+          ...(approval
+            ? {
+                approvalId:
+                  approval.id
+              }
+            : {})
+        };
+      }
+
+      if (
+        intentClaim.state ===
+        "SUCCEEDED"
+      ) {
+        const existingExecution =
+          await args.store
+            .claimExecution({
+              id: newId(),
+              workspaceId:
+                args.principal.workspaceId,
+              actionIntentId: id,
+              idempotencyKey:
+                intentIdempotencyKey,
+              parametersDigest,
+              state: "PENDING",
+              createdAt:
+                now.toISOString()
+            });
+
+        if (
+          existingExecution.type ===
+          "REPLAY"
+        ) {
+          return {
+            status: "SUCCEEDED",
+            humanSummary: summary,
+            actionId: id,
+            executionId:
+              existingExecution.executionId,
+            data:
+              existingExecution.result as Result
+          };
+        }
+      }
+
+      return {
+        status: "CONFLICT",
+        humanSummary:
+          "Den samme handling er allerede registreret.",
+        actionId: id,
+        recovery: {
+          label:
+            "Kontrollér status",
+          action:
+            "actions.get_status"
+        }
+      };
+    }
+  } else {
+    await args.store.createIntent(
+      intent
+    );
+  }
 
   const baseAudit = {
     ...auditBase(
