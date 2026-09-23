@@ -6,6 +6,7 @@ import { redirect } from "next/navigation";
 import { databasePool } from "@/lib/database";
 import { resolveWorkspaceHumanPrincipal } from "@/lib/principal";
 import { PageTitle } from "../_components/page-title";
+import { MoveCalendarEvent } from "./_components/move-calendar-event";
 
 export const dynamic = "force-dynamic";
 
@@ -74,6 +75,11 @@ export default async function CalendarPage({
     ({ db }) => listCalendarEvents(db, principal.workspaceId)
   );
 
+  const canUpdateCalendar =
+    principal.capabilities.includes(
+      "calendar.update"
+    );
+
   const sorted = [...events].sort((a, b) => {
     const aTime = a.startAt?.getTime() ??
       (a.startDate ? new Date(`${a.startDate}T12:00:00Z`).getTime() : 0);
@@ -103,7 +109,7 @@ export default async function CalendarPage({
           {sorted.map((event) => (
             <article
               key={event.id}
-              className="grid gap-2 border-b border-[var(--border-default)] p-4 last:border-b-0 sm:grid-cols-[170px_1fr_170px] sm:items-center"
+              className="grid gap-3 border-b border-[var(--border-default)] p-4 last:border-b-0 sm:grid-cols-[170px_1fr_150px_auto] sm:items-start"
             >
               <div className="text-sm font-medium">
                 {eventStartLabel(event)}
@@ -121,6 +127,36 @@ export default async function CalendarPage({
                 <div className="mt-1 text-xs">
                   {event.syncState}
                 </div>
+              </div>
+
+              <div className="sm:justify-self-end">
+                {canUpdateCalendar &&
+                event.provider === "GOOGLE" &&
+                event.writable &&
+                event.syncState === "CONNECTED" &&
+                event.status === "CONFIRMED" &&
+                !event.allDay &&
+                event.startAt &&
+                event.endAt ? (
+                  <MoveCalendarEvent
+                    workspaceSlug={workspaceSlug}
+                    event={{
+                      id: event.id,
+                      title: event.title,
+                      startAt:
+                        event.startAt.toISOString(),
+                      endAt:
+                        event.endAt.toISOString(),
+                      timezone:
+                        event.timezone ??
+                        "Europe/Copenhagen",
+                      recurrenceMasterId:
+                        event.recurrenceMasterId,
+                      recurrenceRule:
+                        event.recurrenceRule
+                    }}
+                  />
+                ) : null}
               </div>
             </article>
           ))}
