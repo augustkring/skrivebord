@@ -63,6 +63,113 @@ describe("Action Layer", () => {
     expect(store.audit.at(-1)?.outcome).toBe("SUCCEEDED");
   });
 
+
+  it("replays a completed idempotent execution without repeating the side effect", async () => {
+    const store = new InMemoryActionStore();
+    let executions = 0;
+
+    const idempotentDefinition = {
+      id: "calendar.update",
+      input: z.object({
+        workspaceId: z.string(),
+        eventId: z.string(),
+        title: z.string()
+      }).strict(),
+      requiredCapabilities: ["today.manage"],
+      risk: () => "LOW" as const,
+      idempotency: "REQUIRED" as const,
+      externalEffectRefs: (result: { providerEventId: string }) => [
+        `google:event:${result.providerEventId}`
+      ],
+      execute: async () => {
+        executions += 1;
+        return {
+          providerEventId: "event-1"
+        };
+      }
+    };
+
+    const first = await executeAction({
+      definition: idempotentDefinition,
+      principal: human,
+      rawInput: {
+        workspaceId: "ws_a",
+        eventId: "event-1",
+        title: "Flyttet"
+      },
+      idempotencyKey: "idem-1",
+      store
+    });
+
+    const replay = await executeAction({
+      definition: idempotentDefinition,
+      principal: human,
+      rawInput: {
+        workspaceId: "ws_a",
+        eventId: "event-1",
+        title: "Flyttet"
+      },
+      idempotencyKey: "idem-1",
+      store
+    });
+
+    expect(first.status).toBe("SUCCEEDED");
+    expect(replay.status).toBe("SUCCEEDED");
+    expect(replay.executionId).toBe(first.executionId);
+    expect(replay.data).toEqual({
+      providerEventId: "event-1"
+    });
+    expect(executions).toBe(1);
+  });
+
+  it("rejects idempotency key reuse with changed parameters", async () => {
+    const store = new InMemoryActionStore();
+
+    const idempotentDefinition = {
+      id: "calendar.update",
+      input: z.object({
+        workspaceId: z.string(),
+        eventId: z.string(),
+        title: z.string()
+      }).strict(),
+      requiredCapabilities: ["today.manage"],
+      risk: () => "LOW" as const,
+      idempotency: "REQUIRED" as const,
+      execute: async ({ input }: { input: { workspaceId: string; eventId: string; title: string } }) => ({
+        title: input.title
+      })
+    };
+
+    await executeAction({
+      definition: idempotentDefinition,
+      principal: human,
+      rawInput: {
+        workspaceId: "ws_a",
+        eventId: "event-1",
+        title: "A"
+      },
+      idempotencyKey: "idem-reused",
+      store
+    });
+
+    const conflict = await executeAction({
+      definition: idempotentDefinition,
+      principal: human,
+      rawInput: {
+        workspaceId: "ws_a",
+        eventId: "event-1",
+        title: "B"
+      },
+      idempotencyKey: "idem-reused",
+      store
+    });
+
+    expect(conflict.status).toBe("CONFLICT");
+    expect(store.audit.at(-1)?.outcome).toBe(
+      "IDEMPOTENCY_KEY_REUSED_WITH_DIFFERENT_PAYLOAD"
+    );
+  });
+
   it("persists an exact approval object when policy requires review", async () => {
     const store = new InMemoryActionStore();
     const sendDefinition = {
