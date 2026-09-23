@@ -732,16 +732,18 @@ export async function executeAction<Input, Result>(args: {
     };
   }
 
+  const externalEffectRefs =
+    args.definition.externalEffectRefs?.(
+      result,
+      ctx
+    ) ?? [];
+
   if (executionId) {
     try {
       await args.store.completeExecution({
         executionId,
         result,
-        externalEffectRefs:
-          args.definition.externalEffectRefs?.(
-            result,
-            ctx
-          ) ?? [],
+        externalEffectRefs,
         completedAt: new Date().toISOString()
       });
     } catch {
@@ -769,12 +771,6 @@ export async function executeAction<Input, Result>(args: {
   }
 
   await args.store.updateIntentState(id, "SUCCEEDED");
-
-  const externalEffectRefs =
-    args.definition.externalEffectRefs?.(
-      result,
-      ctx
-    ) ?? [];
 
   await args.store.appendAudit({
     ...baseAudit,
