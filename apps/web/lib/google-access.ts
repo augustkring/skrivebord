@@ -42,6 +42,7 @@ function needsRefresh(
 export async function getGoogleAccessContext(input: {
   workspaceId: string;
   jobId: string;
+  connectorAccountId?: string;
   now?: Date;
 }) {
   const now = input.now ?? new Date();
@@ -62,7 +63,8 @@ export async function getGoogleAccessContext(input: {
       ({ db }) =>
         getGoogleSyncContext(
           db,
-          input.workspaceId
+          input.workspaceId,
+          input.connectorAccountId
         )
     );
 
