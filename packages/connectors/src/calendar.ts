@@ -84,6 +84,12 @@ export type CreateCalendarEventInput = {
   event: CalendarEventWrite;
 };
 
+export type GetCalendarEventInput = {
+  accessToken: string;
+  calendarId: string;
+  eventId: string;
+};
+
 export type DeleteCalendarEventInput = {
   accessToken: string;
   calendarId: string;
@@ -104,6 +110,10 @@ export interface CalendarConnector {
 
   createEvent(
     input: CreateCalendarEventInput
+  ): Promise<CalendarSyncEvent>;
+
+  getEvent(
+    input: GetCalendarEventInput
   ): Promise<CalendarSyncEvent>;
 
   updateEvent(
