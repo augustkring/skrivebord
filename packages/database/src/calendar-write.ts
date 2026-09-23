@@ -20,6 +20,8 @@ export type CalendarMoveScope =
 
 export type CalendarMoveTarget = {
   requestedEventId: string;
+  requestedStartAt?: Date;
+  requestedEndAt?: Date;
   localTargetEventId: string;
   calendarSourceId: string;
   connectorAccountId: string;
@@ -183,6 +185,12 @@ export async function getCalendarMoveTarget(
   return {
     requestedEventId:
       requested.id,
+    requestedStartAt:
+      requested.startAt ??
+      undefined,
+    requestedEndAt:
+      requested.endAt ??
+      undefined,
     localTargetEventId:
       target.id,
     calendarSourceId:
