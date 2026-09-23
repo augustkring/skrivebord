@@ -91,6 +91,14 @@ export type GetCalendarEventInput = {
   eventId: string;
 };
 
+export type ListCalendarEventInstancesInput = {
+  accessToken: string;
+  calendarId: string;
+  eventId: string;
+  timeMin?: string;
+  timeMax?: string;
+};
+
 export type DeleteCalendarEventInput = {
   accessToken: string;
   calendarId: string;
@@ -116,6 +124,10 @@ export interface CalendarConnector {
   getEvent(
     input: GetCalendarEventInput
   ): Promise<CalendarSyncEvent>;
+
+  listEventInstances(
+    input: ListCalendarEventInstancesInput
+  ): Promise<CalendarSyncEvent[]>;
 
   updateEvent(
     input: UpdateCalendarEventInput
