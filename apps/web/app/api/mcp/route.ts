@@ -472,7 +472,9 @@ function buildHandler(principal: PrincipalContext) {
               scope: z.enum([
                 "OCCURRENCE",
                 "SERIES"
-              ])
+              ]),
+              idempotencyKey:
+                z.string().uuid()
             }),
             outputSchema: z.object({
               status: z.enum([
@@ -500,7 +502,8 @@ function buildHandler(principal: PrincipalContext) {
             eventId,
             startsAt,
             endsAt,
-            scope
+            scope,
+            idempotencyKey
           }) => {
             const store =
               new TransactionalPostgresActionStore(
@@ -521,6 +524,7 @@ function buildHandler(principal: PrincipalContext) {
                   endsAt,
                   scope
                 },
+                idempotencyKey,
                 store
               });
 
