@@ -28,6 +28,7 @@ type GoogleEvent = {
   start?: GoogleEventDateTime;
   end?: GoogleEventDateTime;
   recurringEventId?: string;
+  originalStartTime?: GoogleEventDateTime;
   recurrence?: string[];
   updated?: string;
 };
@@ -96,6 +97,8 @@ function normalizeGoogleEvent(event: GoogleEvent): CalendarSyncEvent {
     allDay,
     timezone: event.start?.timeZone ?? event.end?.timeZone,
     recurrenceMasterId: event.recurringEventId,
+    recurrenceOriginalStartAt:
+      event.originalStartTime?.dateTime,
     recurrenceRule: event.recurrence?.join("\n"),
     status:
       event.status === "cancelled"
