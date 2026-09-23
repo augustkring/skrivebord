@@ -621,18 +621,32 @@ export async function executeAction<Input, Result>(args: {
         }
       }
 
-      return {
-        status: "CONFLICT",
-        humanSummary:
-          "Den samme handling er allerede registreret.",
-        actionId: id,
-        recovery: {
-          label:
-            "Kontrollér status",
-          action:
-            "actions.get_status"
-        }
-      };
+      if (
+        ![
+          "PENDING",
+          "RUNNING",
+          "FAILED",
+          "CANCELLED"
+        ].includes(intentClaim.state)
+      ) {
+        return {
+          status: "CONFLICT",
+          humanSummary:
+            "Den samme handling er allerede registreret.",
+          actionId: id,
+          recovery: {
+            label:
+              "Kontrollér status",
+            action:
+              "actions.get_status"
+          }
+        };
+      }
+
+      // Continue to the execution claim below. This lets
+      // retryable failed executions reuse the same intent
+      // and idempotency key without repeating a completed
+      // external side effect.
     }
   } else {
     await args.store.createIntent(
