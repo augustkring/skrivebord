@@ -10,7 +10,8 @@ import {
 
 export async function getGoogleSyncContext(
   db: SkrivebordDatabase,
-  workspaceId: string
+  workspaceId: string,
+  connectorAccountId?: string
 ) {
   const [account] = await db
     .select()
@@ -18,7 +19,15 @@ export async function getGoogleSyncContext(
     .where(
       and(
         eq(connectorAccount.workspaceId, workspaceId),
-        eq(connectorAccount.provider, "GOOGLE")
+        eq(connectorAccount.provider, "GOOGLE"),
+        ...(connectorAccountId
+          ? [
+              eq(
+                connectorAccount.id,
+                connectorAccountId
+              )
+            ]
+          : [])
       )
     )
     .limit(1);
