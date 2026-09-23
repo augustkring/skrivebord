@@ -4,6 +4,7 @@ import type {
 } from "@skrivebord/database";
 import {
   buildGoogleCalendarMovePatch,
+  calendarMoveFailurePresentation,
   CalendarMoveError
 } from "./calendar-move";
 
@@ -236,6 +237,49 @@ describe("Google calendar move semantics", () => {
       code:
         "CALENDAR_MOVE_CANNOT_RESIZE",
       retryable: false
+    });
+  });
+
+
+  it("maps provider failures to customer-safe recovery copy", () => {
+    expect(
+      calendarMoveFailurePresentation(
+        "CALENDAR_PROVIDER_CONFLICT",
+        false
+      )
+    ).toEqual({
+      humanSummary:
+        "Begivenheden er ændret i Google siden sidste synkronisering. Gennemgå den nyeste version og prøv igen.",
+      recovery: {
+        label:
+          "Gennemgå kalender",
+        action:
+          "calendar.get_event"
+      }
+    });
+
+    expect(
+      calendarMoveFailurePresentation(
+        "RATE_LIMITED",
+        true
+      )
+    ).toMatchObject({
+      recovery: {
+        action:
+          "calendar.move_event"
+      }
+    });
+
+    expect(
+      calendarMoveFailurePresentation(
+        "AUTH_EXPIRED",
+        false
+      )
+    ).toMatchObject({
+      recovery: {
+        action:
+          "connection.reconnect"
+      }
     });
   });
 
