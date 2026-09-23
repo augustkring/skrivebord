@@ -269,9 +269,9 @@ export async function updateAgentRunStatus(
     status:
       | "ACCEPTED"
       | "RUNNING"
+      | "WAITING"
       | "SUCCEEDED"
       | "FAILED"
-      | "TIMEOUT"
       | "CANCELLED";
     errorCode?: string;
     completedAt?: Date;
@@ -291,7 +291,6 @@ export async function updateAgentRunStatus(
         ([
           "SUCCEEDED",
           "FAILED",
-          "TIMEOUT",
           "CANCELLED"
         ].includes(input.status)
           ? now
