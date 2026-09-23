@@ -157,6 +157,36 @@ export class PostgresActionStore implements ActionStore {
     };
   }
 
+  async getPendingApprovalByIntent(
+    actionIntentId: string
+  ): Promise<{ id: string } | undefined> {
+    const [approval] =
+      await this.db
+        .select({
+          id: approvalRequest.id
+        })
+        .from(approvalRequest)
+        .where(
+          and(
+            eq(
+              approvalRequest.workspaceId,
+              this.workspaceId
+            ),
+            eq(
+              approvalRequest.actionIntentId,
+              actionIntentId
+            ),
+            eq(
+              approvalRequest.state,
+              "PENDING"
+            )
+          )
+        )
+        .limit(1);
+
+    return approval;
+  }
+
   async updateIntentState(
     intentId: string,
     state: ActionIntentState
