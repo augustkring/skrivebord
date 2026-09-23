@@ -150,24 +150,6 @@ export async function POST(
               databasePool,
               principal,
               async ({ db }) => {
-                const next =
-                  await bindAgentCredential(
-                    db,
-                    {
-                      workspaceId:
-                        principal.workspaceId,
-                      name: "Mojn",
-                      runtimeAgentKey:
-                        "mojn",
-                      apiKeyId:
-                        created.id,
-                      capabilities: [
-                        ...MOJN_V1_CAPABILITIES
-                      ],
-                      expiresAt
-                    }
-                  );
-
                 await revokeAgentCredential(
                   db,
                   {
@@ -178,7 +160,22 @@ export async function POST(
                   }
                 );
 
-                return next;
+                return bindAgentCredential(
+                  db,
+                  {
+                    workspaceId:
+                      principal.workspaceId,
+                    name: "Mojn",
+                    runtimeAgentKey:
+                      "mojn",
+                    apiKeyId:
+                      created.id,
+                    capabilities: [
+                      ...MOJN_V1_CAPABILITIES
+                    ],
+                    expiresAt
+                  }
+                );
               }
             );
 
