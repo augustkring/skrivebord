@@ -170,6 +170,84 @@ describe("Action Layer", () => {
     );
   });
 
+
+  it("reuses the same pending approval for an idempotent review-required action", async () => {
+    const store =
+      new InMemoryActionStore();
+
+    const reviewDefinition = {
+      id: "calendar.move",
+      input: z.object({
+        workspaceId: z.string(),
+        eventId: z.string(),
+        startsAt: z.string()
+      }).strict(),
+      requiredCapabilities: [
+        "message.send"
+      ],
+      risk: () =>
+        "MEDIUM" as const,
+      idempotency:
+        "REQUIRED" as const,
+      approval: {
+        requiredApproverScope:
+          "OWNER",
+        consequenceSummary:
+          () =>
+            "Flytter en ekstern kalenderbegivenhed.",
+        reversibility:
+          "PARTIALLY_REVERSIBLE" as const
+      },
+      execute: async () => ({
+        moved: true
+      })
+    };
+
+    const first =
+      await executeAction({
+        definition:
+          reviewDefinition,
+        principal: agent,
+        rawInput: {
+          workspaceId: "ws_a",
+          eventId: "event-1",
+          startsAt:
+            "2026-09-25T10:00:00Z"
+        },
+        idempotencyKey:
+          "approval-idem-1",
+        store
+      });
+
+    const replay =
+      await executeAction({
+        definition:
+          reviewDefinition,
+        principal: agent,
+        rawInput: {
+          workspaceId: "ws_a",
+          eventId: "event-1",
+          startsAt:
+            "2026-09-25T10:00:00Z"
+        },
+        idempotencyKey:
+          "approval-idem-1",
+        store
+      });
+
+    expect(first.status).toBe(
+      "PENDING_APPROVAL"
+    );
+    expect(replay.status).toBe(
+      "PENDING_APPROVAL"
+    );
+    expect(
+      replay.approvalId
+    ).toBe(first.approvalId);
+    expect(store.intents).toHaveLength(1);
+    expect(store.approvals.size).toBe(1);
+  });
+
   it("persists an exact approval object when policy requires review", async () => {
     const store = new InMemoryActionStore();
     const sendDefinition = {
