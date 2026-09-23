@@ -1,4 +1,11 @@
-import { and, desc, eq, ne } from "drizzle-orm";
+import {
+  and,
+  asc,
+  desc,
+  eq,
+  ilike,
+  ne
+} from "drizzle-orm";
 import type { SkrivebordDatabase } from "./client";
 import {
   actionIntent,
@@ -100,4 +107,165 @@ export async function listCalendarEvents(
       eq(calendarEvent.calendarSourceId, calendarSource.id)
     )
     .where(eq(calendarEvent.workspaceId, workspaceId));
+}
+
+
+export async function getCalendarEvent(
+  db: SkrivebordDatabase,
+  input: {
+    workspaceId: string;
+    eventId: string;
+  }
+) {
+  const [event] = await db
+    .select({
+      id: calendarEvent.id,
+      title: calendarEvent.title,
+      category:
+        calendarEvent.category,
+      startAt:
+        calendarEvent.startAt,
+      endAt:
+        calendarEvent.endAt,
+      startDate:
+        calendarEvent.startDate,
+      endDate:
+        calendarEvent.endDate,
+      allDay:
+        calendarEvent.allDay,
+      timezone:
+        calendarEvent.timezone,
+      recurrenceMasterId:
+        calendarEvent
+          .recurrenceMasterId,
+      recurrenceRule:
+        calendarEvent
+          .recurrenceRule,
+      status:
+        calendarEvent.status,
+      provider:
+        calendarSource.provider,
+      sourceName:
+        calendarSource.displayName,
+      writable:
+        calendarSource.writable,
+      syncState:
+        calendarSource.syncState,
+      lastSyncedAt:
+        calendarSource.lastSyncedAt
+    })
+    .from(calendarEvent)
+    .innerJoin(
+      calendarSource,
+      eq(
+        calendarEvent
+          .calendarSourceId,
+        calendarSource.id
+      )
+    )
+    .where(
+      and(
+        eq(
+          calendarEvent.workspaceId,
+          input.workspaceId
+        ),
+        eq(
+          calendarEvent.id,
+          input.eventId
+        )
+      )
+    )
+    .limit(1);
+
+  return event;
+}
+
+export async function searchCalendarEvents(
+  db: SkrivebordDatabase,
+  input: {
+    workspaceId: string;
+    query: string;
+    limit?: number;
+  }
+) {
+  const query =
+    input.query.trim();
+
+  if (!query) {
+    return [];
+  }
+
+  return db
+    .select({
+      id: calendarEvent.id,
+      title: calendarEvent.title,
+      category:
+        calendarEvent.category,
+      startAt:
+        calendarEvent.startAt,
+      endAt:
+        calendarEvent.endAt,
+      startDate:
+        calendarEvent.startDate,
+      endDate:
+        calendarEvent.endDate,
+      allDay:
+        calendarEvent.allDay,
+      timezone:
+        calendarEvent.timezone,
+      recurrenceMasterId:
+        calendarEvent
+          .recurrenceMasterId,
+      recurrenceRule:
+        calendarEvent
+          .recurrenceRule,
+      status:
+        calendarEvent.status,
+      provider:
+        calendarSource.provider,
+      sourceName:
+        calendarSource.displayName,
+      writable:
+        calendarSource.writable,
+      syncState:
+        calendarSource.syncState
+    })
+    .from(calendarEvent)
+    .innerJoin(
+      calendarSource,
+      eq(
+        calendarEvent
+          .calendarSourceId,
+        calendarSource.id
+      )
+    )
+    .where(
+      and(
+        eq(
+          calendarEvent.workspaceId,
+          input.workspaceId
+        ),
+        ne(
+          calendarEvent.status,
+          "CANCELLED"
+        ),
+        ilike(
+          calendarEvent.title,
+          `%${query}%`
+        )
+      )
+    )
+    .orderBy(
+      asc(calendarEvent.startAt),
+      asc(calendarEvent.startDate)
+    )
+    .limit(
+      Math.min(
+        Math.max(
+          input.limit ?? 20,
+          1
+        ),
+        100
+      )
+    );
 }
