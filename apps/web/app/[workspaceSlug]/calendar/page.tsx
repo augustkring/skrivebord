@@ -1,4 +1,5 @@
 import {
+  getWorkspaceProfile,
   listCalendarEvents,
   withPrincipalTransaction
 } from "@skrivebord/database";
@@ -6,87 +7,60 @@ import { redirect } from "next/navigation";
 import { databasePool } from "@/lib/database";
 import { resolveWorkspaceHumanPrincipal } from "@/lib/principal";
 import { PageTitle } from "../_components/page-title";
-import { MoveCalendarEvent } from "./_components/move-calendar-event";
+import {
+  OperationalCalendar
+} from "./_components/operational-calendar";
 
-export const dynamic = "force-dynamic";
-
-function categoryLabel(category: string): string {
-  const labels: Record<string, string> = {
-    BOOKING: "Booking",
-    TURNOVER: "Rengøring",
-    MAINTENANCE: "Vedligehold",
-    ADMIN: "Administration",
-    YEAR_PLAN: "Årsplan"
-  };
-  return labels[category] ?? category;
-}
-
-function providerLabel(provider: string): string {
-  if (provider === "GOOGLE") return "Google";
-  if (provider === "MICROSOFT") return "Microsoft";
-  if (provider === "SKRIVEBORD") return "Skrivebord";
-  return provider;
-}
-
-function eventStartLabel(event: {
-  allDay: boolean;
-  startAt: Date | null;
-  startDate: string | null;
-}): string {
-  if (event.allDay && event.startDate) {
-    return new Intl.DateTimeFormat("da-DK", {
-      timeZone: "UTC",
-      weekday: "short",
-      day: "numeric",
-      month: "numeric"
-    }).format(new Date(`${event.startDate}T12:00:00Z`));
-  }
-
-  if (event.startAt) {
-    return new Intl.DateTimeFormat("da-DK", {
-      timeZone: "Europe/Copenhagen",
-      weekday: "short",
-      day: "numeric",
-      month: "numeric",
-      hour: "2-digit",
-      minute: "2-digit"
-    }).format(event.startAt);
-  }
-
-  return "Tid ikke tilgængelig";
-}
+export const dynamic =
+  "force-dynamic";
 
 export default async function CalendarPage({
   params
 }: {
-  params: Promise<{ workspaceSlug: string }>;
+  params: Promise<{
+    workspaceSlug: string;
+  }>;
 }) {
-  const { workspaceSlug } = await params;
-  const principal = await resolveWorkspaceHumanPrincipal({
-    workspaceSlug,
-    requestId: crypto.randomUUID()
-  });
+  const { workspaceSlug } =
+    await params;
 
-  if (!principal) redirect("/sign-in");
+  const principal =
+    await resolveWorkspaceHumanPrincipal({
+      workspaceSlug,
+      requestId:
+        crypto.randomUUID()
+    });
 
-  const events = await withPrincipalTransaction(
-    databasePool,
-    principal,
-    ({ db }) => listCalendarEvents(db, principal.workspaceId)
-  );
+  if (!principal) {
+    redirect("/sign-in");
+  }
+
+  const state =
+    await withPrincipalTransaction(
+      databasePool,
+      principal,
+      async ({ db }) => ({
+        events:
+          await listCalendarEvents(
+            db,
+            principal.workspaceId
+          ),
+        workspace:
+          await getWorkspaceProfile(
+            db,
+            principal.workspaceId
+          )
+      })
+    );
 
   const canUpdateCalendar =
     principal.capabilities.includes(
       "calendar.update"
     );
 
-  const sorted = [...events].sort((a, b) => {
-    const aTime = a.startAt?.getTime() ??
-      (a.startDate ? new Date(`${a.startDate}T12:00:00Z`).getTime() : 0);
-    const bTime = b.startAt?.getTime() ??
-      (b.startDate ? new Date(`${b.startDate}T12:00:00Z`).getTime() : 0);
-    return aTime - bTime;
-  });
+  const workspaceTimezone =
+    state.workspace?.timezone ??
+    "Europe/Copenhagen";
 
   return (
     <>
@@ -95,76 +69,75 @@ export default async function CalendarPage({
         subtitle="Én normaliseret driftskalender på tværs af Skrivebord og tilsluttede kalendere."
       />
 
-      <div className="mb-4 flex gap-2 text-sm">
-        <button className="rounded-md border border-[var(--border-strong)] bg-white px-3 py-2">
-          Liste
-        </button>
-        <span className="self-center text-xs text-[var(--text-muted)]">
-          Måned og uge kobles på FullCalendar-visningen i connectorfasen.
-        </span>
+      <div className="mb-4">
+        <div className="text-sm font-semibold">
+          Driftskalender
+        </div>
+        <p className="mt-1 text-xs text-[var(--text-secondary)]">
+          Måned, uge og liste bygger på den samme normaliserede kalender-cache. Vælg en begivenhed for at se detaljer eller flytte den.
+        </p>
       </div>
 
-      {sorted.length > 0 ? (
-        <div className="overflow-hidden rounded-xl border border-[var(--border-default)] bg-white">
-          {sorted.map((event) => (
-            <article
-              key={event.id}
-              className="grid gap-3 border-b border-[var(--border-default)] p-4 last:border-b-0 sm:grid-cols-[170px_1fr_150px_auto] sm:items-start"
-            >
-              <div className="text-sm font-medium">
-                {eventStartLabel(event)}
-              </div>
-
-              <div>
-                <div className="font-medium">{event.title}</div>
-                <div className="mt-1 text-sm text-[var(--text-secondary)]">
-                  {categoryLabel(event.category)}
-                </div>
-              </div>
-
-              <div className="text-sm text-[var(--text-muted)] sm:text-right">
-                <div>{providerLabel(event.provider)}</div>
-                <div className="mt-1 text-xs">
-                  {event.syncState}
-                </div>
-              </div>
-
-              <div className="sm:justify-self-end">
-                {canUpdateCalendar &&
-                event.provider === "GOOGLE" &&
-                event.writable &&
-                event.syncState === "CONNECTED" &&
-                event.status === "CONFIRMED" &&
-                !event.allDay &&
-                event.startAt &&
-                event.endAt ? (
-                  <MoveCalendarEvent
-                    workspaceSlug={workspaceSlug}
-                    event={{
-                      id: event.id,
-                      title: event.title,
-                      startAt:
-                        event.startAt.toISOString(),
-                      endAt:
-                        event.endAt.toISOString(),
-                      timezone:
-                        event.timezone ??
-                        "Europe/Copenhagen",
-                      recurrenceMasterId:
-                        event.recurrenceMasterId,
-                      recurrenceRule:
-                        event.recurrenceRule
-                    }}
-                  />
-                ) : null}
-              </div>
-            </article>
-          ))}
-        </div>
-      ) : (
+      {state.events.length ===
+      0 ? (
         <p className="rounded-lg border border-[var(--border-default)] bg-white p-5 text-sm text-[var(--text-secondary)]">
           Der er ingen kalenderbegivenheder endnu. Tilslut en kalender eller opret en intern driftsbegivenhed.
         </p>
+      ) : (
+        <OperationalCalendar
+          workspaceSlug={
+            workspaceSlug
+          }
+          workspaceTimezone={
+            workspaceTimezone
+          }
+          canUpdateCalendar={
+            canUpdateCalendar
+          }
+          events={state.events.map(
+            (event) => ({
+              id: event.id,
+              title:
+                event.title,
+              startAt:
+                event.startAt
+                  ?.toISOString() ??
+                null,
+              endAt:
+                event.endAt
+                  ?.toISOString() ??
+                null,
+              startDate:
+                event.startDate ??
+                null,
+              endDate:
+                event.endDate ??
+                null,
+              allDay:
+                event.allDay,
+              timezone:
+                event.timezone,
+              recurrenceMasterId:
+                event
+                  .recurrenceMasterId,
+              recurrenceRule:
+                event
+                  .recurrenceRule,
+              category:
+                event.category,
+              status:
+                event.status,
+              provider:
+                event.provider,
+              sourceName:
+                event.sourceName,
+              writable:
+                event.writable,
+              syncState:
+                event.syncState
+            })
+          )}
+        />
       )}
     </>
   );
