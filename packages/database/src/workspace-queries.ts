@@ -109,7 +109,18 @@ export async function listCalendarEvents(
       calendarSource,
       eq(calendarEvent.calendarSourceId, calendarSource.id)
     )
-    .where(eq(calendarEvent.workspaceId, workspaceId));
+    .where(
+      and(
+        eq(
+          calendarEvent.workspaceId,
+          workspaceId
+        ),
+        ne(
+          calendarEvent.status,
+          "CANCELLED"
+        )
+      )
+    );
 
   const expandedMasterIds =
     new Set(
