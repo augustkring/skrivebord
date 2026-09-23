@@ -109,6 +109,12 @@ export async function persistCalendarSync(
         allDay: event.allDay,
         timezone: event.timezone,
         recurrenceMasterId: event.recurrenceMasterId,
+        recurrenceOriginalStartAt:
+          event.recurrenceOriginalStartAt
+            ? new Date(
+                event.recurrenceOriginalStartAt
+              )
+            : null,
         recurrenceRule: event.recurrenceRule,
         status: event.status,
         category: "EXTERNAL",
@@ -137,6 +143,12 @@ export async function persistCalendarSync(
           allDay: event.allDay,
           timezone: event.timezone,
           recurrenceMasterId: event.recurrenceMasterId,
+          recurrenceOriginalStartAt:
+            event.recurrenceOriginalStartAt
+              ? new Date(
+                  event.recurrenceOriginalStartAt
+                )
+              : null,
           recurrenceRule: event.recurrenceRule,
           status: event.status,
           sourceUpdatedAt: event.sourceUpdatedAt
