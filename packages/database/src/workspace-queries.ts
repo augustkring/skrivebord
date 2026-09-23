@@ -4,6 +4,7 @@ import {
   desc,
   eq,
   ilike,
+  isNotNull,
   ne
 } from "drizzle-orm";
 import type { SkrivebordDatabase } from "./client";
@@ -298,12 +299,33 @@ export async function searchCalendarEvents(
       )
     );
 
+  const expandedRows =
+    await db
+      .select({
+        masterId:
+          calendarEvent
+            .recurrenceMasterId
+      })
+      .from(calendarEvent)
+      .where(
+        and(
+          eq(
+            calendarEvent.workspaceId,
+            input.workspaceId
+          ),
+          isNotNull(
+            calendarEvent
+              .recurrenceMasterId
+          )
+        )
+      );
+
   const expandedMasterIds =
     new Set(
-      rows
+      expandedRows
         .map(
           (event) =>
-            event.recurrenceMasterId
+            event.masterId
         )
         .filter(
           (
