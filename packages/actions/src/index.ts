@@ -42,7 +42,18 @@ export type ActionDefinition<Input, Result> = {
   reversible?: boolean;
   externalCommunication?: boolean;
   idempotency?: "OPTIONAL" | "REQUIRED";
-  externalEffectRefs?: (result: Result) => string[];
+  externalEffectRefs?: (
+    result: Result,
+    ctx: ActionContext<Input>
+  ) => string[];
+  classifyFailure?: (
+    error: unknown,
+    ctx: ActionContext<Input>
+  ) => {
+    code?: string;
+    summary?: string;
+    retryable: boolean;
+  };
 };
 
 export type ActionIntentState =
@@ -70,47 +81,6 @@ export type ActionIntentRecord = {
   state: ActionIntentState;
   createdAt: string;
 };
-
-export type ActionExecutionState =
-  | "PENDING"
-  | "RUNNING"
-  | "SUCCEEDED"
-  | "FAILED";
-
-export type ActionExecutionRecord = {
-  id: string;
-  workspaceId: string;
-  actionIntentId: string;
-  idempotencyKey: string;
-  parametersDigest: string;
-  state: ActionExecutionState;
-  createdAt: string;
-};
-
-export type ActionExecutionClaim =
-  | {
-      type: "CLAIMED";
-      executionId: string;
-    }
-  | {
-      type: "REPLAY";
-      executionId: string;
-      result: unknown;
-      externalEffectRefs: string[];
-    }
-  | {
-      type: "IN_PROGRESS";
-      executionId: string;
-    }
-  | {
-      type: "FAILED";
-      executionId: string;
-      errorCode?: string;
-    }
-  | {
-      type: "KEY_REUSED";
-      executionId: string;
-    };
 
 export type ActionExecutionState =
   | "PENDING"
@@ -182,6 +152,8 @@ export interface ActionStore extends ApprovalStore {
   failExecution(input: {
     executionId: string;
     errorCode?: string;
+    failureSummary?: string;
+    retryable: boolean;
     failedAt: string;
   }): Promise<void>;
   appendAudit(event: AuditWrite): Promise<void>;
