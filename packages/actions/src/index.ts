@@ -518,14 +518,19 @@ export async function executeAction<Input, Result>(args: {
     };
   }
 
+  const idempotencyKey =
+    args.idempotencyKey?.trim();
   const usesIdempotency =
     args.definition.idempotency === "REQUIRED" ||
-    Boolean(args.idempotencyKey);
+    Boolean(idempotencyKey);
 
   let executionId: string | undefined;
 
   if (usesIdempotency) {
-    if (!args.idempotencyKey) {
+    if (
+      !idempotencyKey ||
+      idempotencyKey.length > 200
+    ) {
       await args.store.updateIntentState(id, "FAILED");
       await args.store.appendAudit({
         ...baseAudit,
@@ -544,7 +549,7 @@ export async function executeAction<Input, Result>(args: {
       id: newId(),
       workspaceId: args.principal.workspaceId,
       actionIntentId: id,
-      idempotencyKey: args.idempotencyKey,
+      idempotencyKey,
       parametersDigest,
       state: "PENDING" as const,
       createdAt: now.toISOString()
@@ -562,7 +567,10 @@ export async function executeAction<Input, Result>(args: {
       await args.store.appendAudit({
         ...baseAudit,
         outcome:
-          "IDEMPOTENCY_KEY_REUSED_WITH_DIFFERENT_PAYLOAD"
+          "IDEMPOTENCY_KEY_REUSED_WITH_DIFFERENT_PAYLOAD",
+        metadata: {
+          executionId
+        }
       });
 
       return {
@@ -578,7 +586,12 @@ export async function executeAction<Input, Result>(args: {
       await args.store.updateIntentState(id, "SUCCEEDED");
       await args.store.appendAudit({
         ...baseAudit,
-        outcome: "REPLAYED_SUCCEEDED_EXECUTION"
+        outcome: "REPLAYED_SUCCEEDED_EXECUTION",
+        metadata: {
+          executionId,
+          externalEffectRefs:
+            claim.externalEffectRefs
+        }
       });
 
       return {
@@ -591,9 +604,16 @@ export async function executeAction<Input, Result>(args: {
     }
 
     if (claim.type === "IN_PROGRESS") {
+      await args.store.updateIntentState(
+        id,
+        "CANCELLED"
+      );
       await args.store.appendAudit({
         ...baseAudit,
-        outcome: "IDEMPOTENT_EXECUTION_IN_PROGRESS"
+        outcome: "IDEMPOTENT_EXECUTION_IN_PROGRESS",
+        metadata: {
+          executionId
+        }
       });
 
       return {
@@ -613,7 +633,12 @@ export async function executeAction<Input, Result>(args: {
       await args.store.updateIntentState(id, "FAILED");
       await args.store.appendAudit({
         ...baseAudit,
-        outcome: "PREVIOUS_EXECUTION_FAILED"
+        outcome: "PREVIOUS_EXECUTION_FAILED",
+        metadata: {
+          executionId,
+          errorCode:
+            claim.errorCode ?? null
+        }
       });
 
       return {
@@ -633,6 +658,10 @@ export async function executeAction<Input, Result>(args: {
       executionId,
       now.toISOString()
     );
+    await args.store.updateIntentState(
+      id,
+      "RUNNING"
+    );
   }
 
   let result: Result;
@@ -641,21 +670,50 @@ export async function executeAction<Input, Result>(args: {
     result =
       await args.definition.execute(ctx);
   } catch (error) {
+    const failure =
+      args.definition.classifyFailure?.(
+        error,
+        ctx
+      ) ?? {
+        code:
+          error instanceof Error
+            ? error.name ||
+              "ACTION_EXECUTION_FAILED"
+            : "ACTION_EXECUTION_FAILED",
+        summary:
+          error instanceof Error
+            ? error.message.slice(0, 500)
+            : undefined,
+        retryable: false
+      };
+
     if (executionId) {
       await args.store.failExecution({
         executionId,
         errorCode:
-          error instanceof Error
-            ? error.message.slice(0, 200)
-            : "ACTION_EXECUTION_FAILED",
-        failedAt: new Date().toISOString()
+          failure.code,
+        failureSummary:
+          failure.summary,
+        retryable:
+          failure.retryable,
+        failedAt:
+          new Date().toISOString()
       });
     }
 
     await args.store.updateIntentState(id, "FAILED");
     await args.store.appendAudit({
       ...baseAudit,
-      outcome: "FAILED"
+      outcome: "FAILED",
+      metadata: {
+        ...(executionId
+          ? { executionId }
+          : {}),
+        errorCode:
+          failure.code ?? null,
+        retryable:
+          failure.retryable
+      }
     });
 
     return {
@@ -665,8 +723,11 @@ export async function executeAction<Input, Result>(args: {
       actionId: id,
       executionId,
       recovery: {
-        label: "Gennemgå fejlen",
-        action: "actions.get_status"
+        label:
+          failure.retryable
+            ? "Prøv igen"
+            : "Gennemgå fejlen",
+        action: args.definition.id
       }
     };
   }
@@ -678,7 +739,8 @@ export async function executeAction<Input, Result>(args: {
         result,
         externalEffectRefs:
           args.definition.externalEffectRefs?.(
-            result
+            result,
+            ctx
           ) ?? [],
         completedAt: new Date().toISOString()
       });
@@ -686,7 +748,10 @@ export async function executeAction<Input, Result>(args: {
       await args.store.appendAudit({
         ...baseAudit,
         outcome:
-          "EXTERNAL_EFFECT_COMPLETED_PERSISTENCE_UNCONFIRMED"
+          "EXTERNAL_EFFECT_COMPLETED_PERSISTENCE_UNCONFIRMED",
+        metadata: {
+          executionId
+        }
       });
 
       return {
@@ -704,9 +769,24 @@ export async function executeAction<Input, Result>(args: {
   }
 
   await args.store.updateIntentState(id, "SUCCEEDED");
+
+  const externalEffectRefs =
+    args.definition.externalEffectRefs?.(
+      result,
+      ctx
+    ) ?? [];
+
   await args.store.appendAudit({
     ...baseAudit,
-    outcome: "SUCCEEDED"
+    outcome: "SUCCEEDED",
+    metadata: {
+      ...(executionId
+        ? { executionId }
+        : {}),
+      ...(externalEffectRefs.length > 0
+        ? { externalEffectRefs }
+        : {})
+    }
   });
 
   return {
