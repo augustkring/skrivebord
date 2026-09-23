@@ -137,6 +137,130 @@ describe("GoogleCalendarConnector", () => {
   });
 
 
+
+  it("paginates recurring instances and preserves their provider identity", async () => {
+    const fetchMock = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(
+        jsonResponse({
+          items: [
+            {
+              id:
+                "series-instance-1",
+              etag: "instance-v1",
+              summary:
+                "Ugentlig rengøring",
+              recurringEventId:
+                "series-master",
+              originalStartTime: {
+                dateTime:
+                  "2026-09-25T10:00:00+02:00",
+                timeZone:
+                  "Europe/Copenhagen"
+              },
+              start: {
+                dateTime:
+                  "2026-09-25T10:00:00+02:00",
+                timeZone:
+                  "Europe/Copenhagen"
+              },
+              end: {
+                dateTime:
+                  "2026-09-25T11:00:00+02:00",
+                timeZone:
+                  "Europe/Copenhagen"
+              }
+            }
+          ],
+          nextPageToken:
+            "instances-2"
+        })
+      )
+      .mockResolvedValueOnce(
+        jsonResponse({
+          items: [
+            {
+              id:
+                "series-instance-2",
+              etag: "instance-v2",
+              summary:
+                "Ugentlig rengøring",
+              recurringEventId:
+                "series-master",
+              originalStartTime: {
+                dateTime:
+                  "2026-10-02T10:00:00+02:00",
+                timeZone:
+                  "Europe/Copenhagen"
+              },
+              start: {
+                dateTime:
+                  "2026-10-02T11:00:00+02:00",
+                timeZone:
+                  "Europe/Copenhagen"
+              },
+              end: {
+                dateTime:
+                  "2026-10-02T12:00:00+02:00",
+                timeZone:
+                  "Europe/Copenhagen"
+              }
+            }
+          ]
+        })
+      );
+
+    const connector =
+      new GoogleCalendarConnector(
+        fetchMock
+      );
+
+    const instances =
+      await connector.listEventInstances({
+        accessToken: "token",
+        calendarId: "primary",
+        eventId:
+          "series-master",
+        timeMin:
+          "2026-09-01T00:00:00Z",
+        timeMax:
+          "2026-11-01T00:00:00Z"
+      });
+
+    expect(instances).toHaveLength(2);
+    expect(
+      instances[1]
+    ).toMatchObject({
+      providerEventId:
+        "series-instance-2",
+      recurrenceMasterId:
+        "series-master",
+      recurrenceOriginalStartAt:
+        "2026-10-02T10:00:00+02:00",
+      startAt:
+        "2026-10-02T11:00:00+02:00"
+    });
+
+    const secondUrl =
+      new URL(
+        String(
+          fetchMock.mock
+            .calls[1]?.[0]
+        )
+      );
+
+    expect(
+      secondUrl.searchParams.get(
+        "pageToken"
+      )
+    ).toBe("instances-2");
+    expect(
+      secondUrl.searchParams.get(
+        "showDeleted"
+      )
+    ).toBe("true");
+  });
+
   it("fetches the current provider event for stale-write reconciliation", async () => {
     const fetchMock =
       vi.fn<typeof fetch>()
