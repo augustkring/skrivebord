@@ -381,6 +381,307 @@ describeDatabase("database tenant isolation", () => {
 
 
 
+
+  it("replaces expanded recurring instances atomically and hides the series master from calendar reads", async () => {
+    const actor = principal(
+      workspaceA,
+      "calendar-recurrence-sync"
+    );
+
+    const state =
+      await withPrincipalTransaction(
+        pool,
+        actor,
+        async ({ db }) => {
+          const [account] =
+            await db
+              .insert(
+                connectorAccount
+              )
+              .values({
+                workspaceId:
+                  workspaceA,
+                provider: "GOOGLE",
+                displayName:
+                  "Recurring Google Calendar",
+                providerAccountId:
+                  `google-recurring-${suffix}`,
+                status:
+                  "CONNECTED",
+                scopes: [
+                  "calendar.events"
+                ],
+                connectedBy:
+                  actor.principalId
+              })
+              .returning({
+                id:
+                  connectorAccount.id
+              });
+
+          if (!account) {
+            throw new Error(
+              "CONNECTOR_ACCOUNT_CREATE_FAILED"
+            );
+          }
+
+          const [source] =
+            await db
+              .insert(
+                calendarSource
+              )
+              .values({
+                workspaceId:
+                  workspaceA,
+                provider: "GOOGLE",
+                connectorAccountId:
+                  account.id,
+                providerCalendarId:
+                  `recurring-${suffix}`,
+                displayName:
+                  "Recurring calendar",
+                writable: true,
+                syncState:
+                  "CONNECTED"
+              })
+              .returning({
+                id:
+                  calendarSource.id
+              });
+
+          if (!source) {
+            throw new Error(
+              "CALENDAR_SOURCE_CREATE_FAILED"
+            );
+          }
+
+          const masterId =
+            `series-${suffix}`;
+
+          await persistCalendarSync(
+            db,
+            {
+              workspaceId:
+                workspaceA,
+              connectorAccountId:
+                account.id,
+              calendarSourceId:
+                source.id,
+              resourceScope:
+                source.id,
+              provider: "GOOGLE",
+              mode: "INITIAL",
+              result: {
+                fullResyncRequired:
+                  false,
+                cursor: {
+                  type:
+                    "GOOGLE_SYNC_TOKEN",
+                  value:
+                    "recurring-sync-1"
+                },
+                events: [
+                  {
+                    providerEventId:
+                      masterId,
+                    providerVersion:
+                      "master-v1",
+                    title:
+                      "Ugentlig rengøring",
+                    startAt:
+                      "2026-09-25T08:00:00Z",
+                    endAt:
+                      "2026-09-25T09:00:00Z",
+                    allDay: false,
+                    timezone:
+                      "Europe/Copenhagen",
+                    recurrenceRule:
+                      "RRULE:FREQ=WEEKLY",
+                    status:
+                      "CONFIRMED"
+                  },
+                  {
+                    providerEventId:
+                      `old-instance-${suffix}`,
+                    providerVersion:
+                      "instance-v1",
+                    title:
+                      "Ugentlig rengøring",
+                    startAt:
+                      "2026-10-02T08:00:00Z",
+                    endAt:
+                      "2026-10-02T09:00:00Z",
+                    allDay: false,
+                    timezone:
+                      "Europe/Copenhagen",
+                    recurrenceMasterId:
+                      masterId,
+                    recurrenceOriginalStartAt:
+                      "2026-10-02T08:00:00Z",
+                    status:
+                      "CONFIRMED"
+                  }
+                ]
+              },
+              replaceSeriesMasterIds: [
+                masterId
+              ],
+              protectCursor:
+                (raw) =>
+                  `protected:${raw}`
+            }
+          );
+
+          await persistCalendarSync(
+            db,
+            {
+              workspaceId:
+                workspaceA,
+              connectorAccountId:
+                account.id,
+              calendarSourceId:
+                source.id,
+              resourceScope:
+                source.id,
+              provider: "GOOGLE",
+              mode:
+                "INCREMENTAL",
+              result: {
+                fullResyncRequired:
+                  false,
+                cursor: {
+                  type:
+                    "GOOGLE_SYNC_TOKEN",
+                  value:
+                    "recurring-sync-2"
+                },
+                events: [
+                  {
+                    providerEventId:
+                      masterId,
+                    providerVersion:
+                      "master-v2",
+                    title:
+                      "Ugentlig rengøring",
+                    startAt:
+                      "2026-09-25T09:00:00Z",
+                    endAt:
+                      "2026-09-25T10:00:00Z",
+                    allDay: false,
+                    timezone:
+                      "Europe/Copenhagen",
+                    recurrenceRule:
+                      "RRULE:FREQ=WEEKLY",
+                    status:
+                      "CONFIRMED"
+                  },
+                  {
+                    providerEventId:
+                      `new-instance-${suffix}`,
+                    providerVersion:
+                      "instance-v2",
+                    title:
+                      "Ugentlig rengøring",
+                    startAt:
+                      "2026-10-02T09:00:00Z",
+                    endAt:
+                      "2026-10-02T10:00:00Z",
+                    allDay: false,
+                    timezone:
+                      "Europe/Copenhagen",
+                    recurrenceMasterId:
+                      masterId,
+                    recurrenceOriginalStartAt:
+                      "2026-10-02T09:00:00Z",
+                    status:
+                      "CONFIRMED"
+                  }
+                ]
+              },
+              replaceSeriesMasterIds: [
+                masterId
+              ],
+              protectCursor:
+                (raw) =>
+                  `protected:${raw}`
+            }
+          );
+
+          const visible =
+            await listCalendarEvents(
+              db,
+              workspaceA
+            );
+
+          const raw =
+            await db
+              .select({
+                providerEventId:
+                  calendarEvent
+                    .providerEventId,
+                recurrenceMasterId:
+                  calendarEvent
+                    .recurrenceMasterId,
+                recurrenceOriginalStartAt:
+                  calendarEvent
+                    .recurrenceOriginalStartAt
+              })
+              .from(
+                calendarEvent
+              )
+              .where(
+                eq(
+                  calendarEvent
+                    .calendarSourceId,
+                  source.id
+                )
+              );
+
+          return {
+            masterId,
+            visible,
+            raw
+          };
+        }
+      );
+
+    expect(
+      state.raw.some(
+        (event) =>
+          event.providerEventId ===
+          `old-instance-${suffix}`
+      )
+    ).toBe(false);
+
+    expect(
+      state.raw.some(
+        (event) =>
+          event.providerEventId ===
+          `new-instance-${suffix}` &&
+          event
+            .recurrenceOriginalStartAt
+            ?.toISOString() ===
+            "2026-10-02T09:00:00.000Z"
+      )
+    ).toBe(true);
+
+    expect(
+      state.visible.some(
+        (event) =>
+          event.providerEventId ===
+          state.masterId
+      )
+    ).toBe(false);
+
+    expect(
+      state.visible.some(
+        (event) =>
+          event.providerEventId ===
+          `new-instance-${suffix}`
+      )
+    ).toBe(true);
+  });
+
   it("resolves and persists calendar write targets inside the active tenant only", async () => {
     const actor = principal(
       workspaceA,
