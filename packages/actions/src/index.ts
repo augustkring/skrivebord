@@ -158,6 +158,9 @@ export type ActionIntentClaim =
 export interface ActionStore extends ApprovalStore {
   createIntent(intent: ActionIntentRecord): Promise<void>;
   claimIntent(intent: ActionIntentRecord): Promise<ActionIntentClaim>;
+  getPendingApprovalByIntent?(
+    actionIntentId: string
+  ): Promise<{ id: string } | undefined>;
   updateIntentState(intentId: string, state: ActionIntentState): Promise<void>;
   claimExecution(execution: ActionExecutionRecord): Promise<ActionExecutionClaim>;
   markExecutionRunning(executionId: string, startedAt: string): Promise<void>;
@@ -239,6 +242,24 @@ export class InMemoryActionStore implements ActionStore {
       parametersDigest:
         existing.parametersDigest
     };
+  }
+
+  async getPendingApprovalByIntent(
+    actionIntentId: string
+  ): Promise<{ id: string } | undefined> {
+    const approval =
+      [...this.approvals.values()]
+        .find(
+          (candidate) =>
+            candidate.actionIntentId ===
+              actionIntentId &&
+            candidate.state ===
+              "PENDING"
+        );
+
+    return approval
+      ? { id: approval.id }
+      : undefined;
   }
 
   async updateIntentState(intentId: string, state: ActionIntentState) {
