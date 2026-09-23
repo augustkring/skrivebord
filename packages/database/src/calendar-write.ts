@@ -22,6 +22,7 @@ export type CalendarMoveTarget = {
   requestedEventId: string;
   requestedStartAt?: Date;
   requestedEndAt?: Date;
+  requestedRecurrenceMasterId?: string;
   localTargetEventId: string;
   calendarSourceId: string;
   connectorAccountId: string;
@@ -190,6 +191,9 @@ export async function getCalendarMoveTarget(
       undefined,
     requestedEndAt:
       requested.endAt ??
+      undefined,
+    requestedRecurrenceMasterId:
+      requested.recurrenceMasterId ??
       undefined,
     localTargetEventId:
       target.id,
