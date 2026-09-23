@@ -173,3 +173,85 @@ export function buildGoogleCalendarMovePatch(input: {
     }
   };
 }
+
+
+export function calendarMoveFailurePresentation(
+  code?: string,
+  retryable = false
+): {
+  humanSummary: string;
+  recovery?: {
+    label: string;
+    action: string;
+  };
+} {
+  switch (code) {
+    case "CALENDAR_PROVIDER_CONFLICT":
+    case "CONFLICT":
+      return {
+        humanSummary:
+          "Begivenheden er ændret i Google siden sidste synkronisering. Gennemgå den nyeste version og prøv igen.",
+        recovery: {
+          label: "Gennemgå kalender",
+          action: "calendar.get_event"
+        }
+      };
+
+    case "AUTH_EXPIRED":
+      return {
+        humanSummary:
+          "Google Calendar skal forbindes igen, før begivenheden kan ændres.",
+        recovery: {
+          label: "Forbind Google igen",
+          action: "connection.reconnect"
+        }
+      };
+
+    case "RATE_LIMITED":
+    case "UNAVAILABLE":
+      return {
+        humanSummary:
+          "Google Calendar er midlertidigt utilgængelig. Prøv igen om lidt.",
+        recovery: {
+          label: "Prøv igen",
+          action: "calendar.move_event"
+        }
+      };
+
+    case "CALENDAR_SOURCE_NOT_WRITABLE":
+      return {
+        humanSummary:
+          "Kalenderen kan ikke ændres i sin nuværende tilstand."
+      };
+
+    case "CALENDAR_EVENT_VERSION_REQUIRED":
+      return {
+        humanSummary:
+          "Begivenheden skal synkroniseres igen, før den kan ændres.",
+        recovery: {
+          label: "Synkronisér kalender",
+          action: "connection.google.sync"
+        }
+      };
+
+    case "ALL_DAY_MOVE_NOT_SUPPORTED":
+      return {
+        humanSummary:
+          "Heldagsbegivenheder kan endnu ikke flyttes med denne handling."
+      };
+
+    case "CALENDAR_MOVE_CANNOT_RESIZE":
+      return {
+        humanSummary:
+          "Flytning må ikke ændre begivenhedens varighed."
+      };
+
+    default:
+      return {
+        humanSummary:
+          retryable
+            ? "Kalenderændringen kunne ikke gennemføres lige nu. Prøv igen."
+            : "Kalenderændringen kunne ikke gennemføres."
+      };
+  }
+}
