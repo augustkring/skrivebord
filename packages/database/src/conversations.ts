@@ -385,3 +385,31 @@ export async function markAgentRuntimeStatus(
       )
     );
 }
+
+
+export async function getAgentRun(
+  db: SkrivebordDatabase,
+  input: {
+    workspaceId: string;
+    gatewayRunId: string;
+  }
+) {
+  const [run] = await db
+    .select()
+    .from(agentRun)
+    .where(
+      and(
+        eq(
+          agentRun.workspaceId,
+          input.workspaceId
+        ),
+        eq(
+          agentRun.gatewayRunId,
+          input.gatewayRunId
+        )
+      )
+    )
+    .limit(1);
+
+  return run;
+}
