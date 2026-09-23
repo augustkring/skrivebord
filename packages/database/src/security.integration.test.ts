@@ -37,7 +37,11 @@ import {
 } from "./index";
 
 const databaseUrl = process.env.DATABASE_TEST_URL;
-const describeDatabase = databaseUrl ? describe : describe.skip;
+const adminDatabaseUrl = process.env.DATABASE_URL;
+const describeDatabase =
+  databaseUrl && adminDatabaseUrl
+    ? describe
+    : describe.skip;
 
 function principal(
   workspaceId: string,
@@ -58,6 +62,7 @@ function principal(
 
 describeDatabase("database tenant isolation", () => {
   const pool = createDatabasePool(databaseUrl ?? "");
+  const adminPool = createDatabasePool(adminDatabaseUrl ?? "");
   const suffix = crypto.randomUUID().slice(0, 8);
   const workspaceA = `test-a-${suffix}`;
   const workspaceB = `test-b-${suffix}`;
@@ -89,7 +94,10 @@ describeDatabase("database tenant isolation", () => {
   });
 
   afterAll(async () => {
-    await pool.end();
+    await Promise.all([
+      pool.end(),
+      adminPool.end()
+    ]);
   });
 
   it("limits unfiltered reads to the principal workspace", async () => {
@@ -447,54 +455,62 @@ describeDatabase("database tenant isolation", () => {
       "SYSTEM"
     );
 
-    await withPrincipalTransaction(
-      pool,
-      system,
-      async ({ db, client }) => {
-        const oldKeyId =
-          `key-old-${suffix}`;
-        const conflictKeyId =
-          `key-conflict-${suffix}`;
-        const newKeyId =
-          `key-new-${suffix}`;
+    const oldKeyId =
+      `key-old-${suffix}`;
+    const conflictKeyId =
+      `key-conflict-${suffix}`;
+    const newKeyId =
+      `key-new-${suffix}`;
 
-        for (const keyId of [
-          oldKeyId,
-          conflictKeyId,
-          newKeyId
-        ]) {
-          await client.query(
-            'insert into "apikey" ("id", "configId", "name", "referenceId", "key", "enabled", "createdAt", "updatedAt") values ($1, $2, $3, $4, $5, true, now(), now())',
-            [
-              keyId,
-              "agent-keys",
-              "Mojn test",
-              workspaceA,
-              `hashed-${keyId}`
-            ]
-          );
-        }
+    for (const keyId of [
+      oldKeyId,
+      conflictKeyId,
+      newKeyId
+    ]) {
+      await adminPool.query(
+        'insert into "apikey" ("id", "configId", "name", "referenceId", "key", "enabled", "createdAt", "updatedAt") values ($1, $2, $3, $4, $5, true, now(), now())',
+        [
+          keyId,
+          "agent-keys",
+          "Mojn test",
+          workspaceA,
+          `hashed-${keyId}`
+        ]
+      );
+    }
 
-        const first = await bindAgentCredential(
-          db,
-          {
-            workspaceId: workspaceA,
-            name: "Mojn",
-            runtimeAgentKey:
-              `mojn-${suffix}`,
-            apiKeyId: oldKeyId,
-            capabilities: [
-              "today.read",
-              "today.manage"
-            ]
-          }
-        );
-
-        await expect(
+    const first =
+      await withPrincipalTransaction(
+        pool,
+        system,
+        ({ db }) =>
           bindAgentCredential(
             db,
             {
-              workspaceId: workspaceA,
+              workspaceId:
+                workspaceA,
+              name: "Mojn",
+              runtimeAgentKey:
+                `mojn-${suffix}`,
+              apiKeyId: oldKeyId,
+              capabilities: [
+                "today.read",
+                "today.manage"
+              ]
+            }
+          )
+      );
+
+    await expect(
+      withPrincipalTransaction(
+        pool,
+        system,
+        ({ db }) =>
+          bindAgentCredential(
+            db,
+            {
+              workspaceId:
+                workspaceA,
               name: "Mojn",
               runtimeAgentKey:
                 `mojn-${suffix}`,
@@ -505,10 +521,35 @@ describeDatabase("database tenant isolation", () => {
               ]
             }
           )
-        ).rejects.toThrow();
+      )
+    ).rejects.toThrow();
 
-        const stillActive =
-          await getBoundAgentCredential(
+    const stillActive =
+      await withPrincipalTransaction(
+        pool,
+        system,
+        ({ db }) =>
+          getBoundAgentCredential(
+            db,
+            {
+              workspaceId:
+                workspaceA,
+              apiKeyId:
+                first.apiKeyId
+            }
+          )
+      );
+
+    expect(
+      stillActive?.apiKeyId
+    ).toBe(first.apiKeyId);
+
+    const second =
+      await withPrincipalTransaction(
+        pool,
+        system,
+        async ({ db }) => {
+          await revokeAgentCredential(
             db,
             {
               workspaceId:
@@ -518,21 +559,7 @@ describeDatabase("database tenant isolation", () => {
             }
           );
 
-        expect(
-          stillActive?.apiKeyId
-        ).toBe(first.apiKeyId);
-
-        await revokeAgentCredential(
-          db,
-          {
-            workspaceId: workspaceA,
-            apiKeyId:
-              first.apiKeyId
-          }
-        );
-
-        const second =
-          await bindAgentCredential(
+          return bindAgentCredential(
             db,
             {
               workspaceId:
@@ -548,37 +575,47 @@ describeDatabase("database tenant isolation", () => {
               ]
             }
           );
+        }
+      );
 
-        const oldAfterRotation =
-          await getBoundAgentCredential(
-            db,
-            {
-              workspaceId:
-                workspaceA,
-              apiKeyId:
-                first.apiKeyId
-            }
-          );
+    const [oldAfterRotation, newAfterRotation] =
+      await Promise.all([
+        withPrincipalTransaction(
+          pool,
+          system,
+          ({ db }) =>
+            getBoundAgentCredential(
+              db,
+              {
+                workspaceId:
+                  workspaceA,
+                apiKeyId:
+                  first.apiKeyId
+              }
+            )
+        ),
+        withPrincipalTransaction(
+          pool,
+          system,
+          ({ db }) =>
+            getBoundAgentCredential(
+              db,
+              {
+                workspaceId:
+                  workspaceA,
+                apiKeyId:
+                  second.apiKeyId
+              }
+            )
+        )
+      ]);
 
-        const newAfterRotation =
-          await getBoundAgentCredential(
-            db,
-            {
-              workspaceId:
-                workspaceA,
-              apiKeyId:
-                second.apiKeyId
-            }
-          );
-
-        expect(
-          oldAfterRotation
-        ).toBeUndefined();
-        expect(
-          newAfterRotation?.apiKeyId
-        ).toBe(second.apiKeyId);
-      }
-    );
+    expect(
+      oldAfterRotation
+    ).toBeUndefined();
+    expect(
+      newAfterRotation?.apiKeyId
+    ).toBe(second.apiKeyId);
   });
 
   it("keeps audit append-only for the application role", async () => {
