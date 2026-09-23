@@ -147,6 +147,12 @@ importers:
 
   packages/agent:
     dependencies:
+      '@openclaw/gateway-client':
+        specifier: 2026.8.1
+        version: 2026.8.1
+      '@openclaw/gateway-protocol':
+        specifier: 2026.8.1
+        version: 2026.8.1
       '@skrivebord/contracts':
         specifier: workspace:*
         version: link:../contracts
