@@ -131,7 +131,6 @@ export function OperationalCalendar({
             timeGridPlugin,
             listPlugin
           ]}
-          themeSystem="classic"
           locale={daLocale}
           timeZone={
             workspaceTimezone
