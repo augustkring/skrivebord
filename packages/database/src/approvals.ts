@@ -1,0 +1,149 @@
+import {
+  and,
+  desc,
+  eq
+} from "drizzle-orm";
+import type {
+  SkrivebordDatabase
+} from "./client";
+import {
+  actionIntent,
+  approvalRequest
+} from "./schema";
+
+export async function listPendingApprovals(
+  db: SkrivebordDatabase,
+  workspaceId: string
+) {
+  return db
+    .select({
+      id: approvalRequest.id,
+      actionIntentId:
+        approvalRequest.actionIntentId,
+      requestedByPrincipalId:
+        approvalRequest
+          .requestedByPrincipalId,
+      requestedByPrincipalType:
+        approvalRequest
+          .requestedByPrincipalType,
+      requiredApproverScope:
+        approvalRequest
+          .requiredApproverScope,
+      humanSummary:
+        approvalRequest.humanSummary,
+      consequenceSummary:
+        approvalRequest
+          .consequenceSummary,
+      reversibility:
+        approvalRequest.reversibility,
+      targetFingerprint:
+        approvalRequest
+          .targetFingerprint,
+      parametersDigest:
+        approvalRequest
+          .parametersDigest,
+      state:
+        approvalRequest.state,
+      createdAt:
+        approvalRequest.createdAt,
+      expiresAt:
+        approvalRequest.expiresAt,
+      actionId:
+        actionIntent.actionId,
+      parameters:
+        actionIntent.parameters,
+      riskLevel:
+        actionIntent.riskLevel
+    })
+    .from(approvalRequest)
+    .innerJoin(
+      actionIntent,
+      and(
+        eq(
+          approvalRequest
+            .actionIntentId,
+          actionIntent.id
+        ),
+        eq(
+          approvalRequest
+            .workspaceId,
+          actionIntent.workspaceId
+        )
+      )
+    )
+    .where(
+      and(
+        eq(
+          approvalRequest.workspaceId,
+          workspaceId
+        ),
+        eq(
+          approvalRequest.state,
+          "PENDING"
+        )
+      )
+    )
+    .orderBy(
+      desc(
+        approvalRequest.createdAt
+      )
+    );
+}
+
+export async function getApprovalIntent(
+  db: SkrivebordDatabase,
+  input: {
+    workspaceId: string;
+    approvalId: string;
+  }
+) {
+  const [row] = await db
+    .select({
+      approvalId:
+        approvalRequest.id,
+      actionIntentId:
+        approvalRequest.actionIntentId,
+      approvalState:
+        approvalRequest.state,
+      targetFingerprint:
+        approvalRequest
+          .targetFingerprint,
+      actionId:
+        actionIntent.actionId,
+      parameters:
+        actionIntent.parameters,
+      intentState:
+        actionIntent.state
+    })
+    .from(approvalRequest)
+    .innerJoin(
+      actionIntent,
+      and(
+        eq(
+          approvalRequest
+            .actionIntentId,
+          actionIntent.id
+        ),
+        eq(
+          approvalRequest
+            .workspaceId,
+          actionIntent.workspaceId
+        )
+      )
+    )
+    .where(
+      and(
+        eq(
+          approvalRequest.workspaceId,
+          input.workspaceId
+        ),
+        eq(
+          approvalRequest.id,
+          input.approvalId
+        )
+      )
+    )
+    .limit(1);
+
+  return row;
+}
