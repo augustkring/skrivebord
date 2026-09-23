@@ -8,11 +8,15 @@ import {
   loadOperationalSnapshot,
   PostgresActionStore,
   recomputeToday,
+  TransactionalPostgresActionStore,
   withPrincipalTransaction
 } from "@skrivebord/database";
 import { createMcpHandler } from "mcp-handler";
 import { z } from "zod";
 import { databasePool } from "@/lib/database";
+import {
+  createMoveGoogleCalendarEventAction
+} from "@/lib/google-calendar-actions";
 import { resolveMcpAgentPrincipal } from "@/lib/mcp-auth";
 
 export const dynamic = "force-dynamic";
@@ -444,6 +448,108 @@ function buildHandler(principal: PrincipalContext) {
                 }
               ],
               structuredContent: output
+            };
+          }
+        );
+      }
+
+
+      if (has(principal, "calendar.update")) {
+        server.registerTool(
+          "calendar.move",
+          {
+            title: "Flyt kalenderbegivenhed",
+            description:
+              "Anmoder om at flytte en eksisterende kalenderbegivenhed. Enkelt forekomst og hele serien er eksplicitte scopes. Mojn kan ikke selv godkende handlingen.",
+            inputSchema: z.object({
+              eventId: z.string().uuid(),
+              startsAt: z.string().datetime({
+                offset: true
+              }),
+              endsAt: z.string().datetime({
+                offset: true
+              }),
+              scope: z.enum([
+                "OCCURRENCE",
+                "SERIES"
+              ])
+            }),
+            outputSchema: z.object({
+              status: z.enum([
+                "PENDING_APPROVAL",
+                "SUCCEEDED",
+                "FAILED",
+                "DENIED",
+                "CONFLICT"
+              ]),
+              humanSummary: z.string(),
+              actionId:
+                z.string().uuid().optional(),
+              approvalId:
+                z.string().uuid().optional(),
+              executionId:
+                z.string().uuid().optional()
+            }),
+            annotations: {
+              readOnlyHint: false,
+              destructiveHint: false,
+              idempotentHint: true
+            }
+          },
+          async ({
+            eventId,
+            startsAt,
+            endsAt,
+            scope
+          }) => {
+            const store =
+              new TransactionalPostgresActionStore(
+                databasePool,
+                principal
+              );
+
+            const result =
+              await executeAction({
+                definition:
+                  createMoveGoogleCalendarEventAction(),
+                principal,
+                rawInput: {
+                  workspaceId:
+                    principal.workspaceId,
+                  eventId,
+                  startsAt,
+                  endsAt,
+                  scope
+                },
+                store
+              });
+
+            const output = {
+              status:
+                result.status,
+              humanSummary:
+                result.humanSummary,
+              actionId:
+                result.actionId,
+              approvalId:
+                result.approvalId,
+              executionId:
+                result.executionId
+            };
+
+            return {
+              content: [
+                {
+                  type: "text",
+                  text:
+                    result.status ===
+                    "PENDING_APPROVAL"
+                      ? `${result.humanSummary} Afventer menneskelig godkendelse.`
+                      : result.humanSummary
+                }
+              ],
+              structuredContent:
+                output
             };
           }
         );
