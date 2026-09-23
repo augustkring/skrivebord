@@ -309,6 +309,35 @@ export const actionIntent = pgTable("action_intent", {
   expiresAt: timestamp("expires_at", { withTimezone: true })
 }, (t) => [index("action_intent_workspace_idx").on(t.workspaceId)]);
 
+
+export const actionExecution = pgTable("action_execution", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  workspaceId: text("workspace_id").notNull(),
+  actionIntentId: uuid("action_intent_id").notNull(),
+  idempotencyKey: text("idempotency_key").notNull(),
+  parametersDigest: text("parameters_digest").notNull(),
+  state: actionState("state").notNull().default("PENDING"),
+  attemptCount: integer("attempt_count").notNull().default(1),
+  result: jsonb("result_json"),
+  externalEffectRefs: jsonb("external_effect_refs_json").notNull().default([]),
+  errorCode: text("error_code"),
+  startedAt: timestamp("started_at", { withTimezone: true }),
+  completedAt: timestamp("completed_at", { withTimezone: true }),
+  lastErrorAt: timestamp("last_error_at", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow()
+}, (t) => [
+  uniqueIndex("action_execution_intent_unique").on(t.actionIntentId),
+  uniqueIndex("action_execution_idempotency_unique").on(
+    t.workspaceId,
+    t.idempotencyKey
+  ),
+  index("action_execution_workspace_state_idx").on(
+    t.workspaceId,
+    t.state
+  )
+]);
+
 export const approvalRequest = pgTable("approval_request", {
   id: uuid("id").primaryKey().defaultRandom(),
   workspaceId: text("workspace_id").notNull(),
