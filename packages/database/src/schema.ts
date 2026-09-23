@@ -321,6 +321,8 @@ export const actionExecution = pgTable("action_execution", {
   result: jsonb("result_json"),
   externalEffectRefs: jsonb("external_effect_refs_json").notNull().default([]),
   errorCode: text("error_code"),
+  failureSummary: text("failure_summary"),
+  retryable: boolean("retryable").notNull().default(false),
   startedAt: timestamp("started_at", { withTimezone: true }),
   completedAt: timestamp("completed_at", { withTimezone: true }),
   lastErrorAt: timestamp("last_error_at", { withTimezone: true }),
