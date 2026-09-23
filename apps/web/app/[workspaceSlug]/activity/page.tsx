@@ -1,11 +1,13 @@
 import {
   listActivityEvents,
+  listPendingApprovals,
   withPrincipalTransaction
 } from "@skrivebord/database";
 import { redirect } from "next/navigation";
 import { databasePool } from "@/lib/database";
 import { resolveWorkspaceHumanPrincipal } from "@/lib/principal";
 import { PageTitle } from "../_components/page-title";
+import { ApprovalCard } from "./_components/approval-card";
 
 export const dynamic = "force-dynamic";
 
@@ -36,11 +38,30 @@ export default async function ActivityPage({
 
   if (!principal) redirect("/sign-in");
 
-  const activity = await withPrincipalTransaction(
+  const {
+    activity,
+    approvals
+  } = await withPrincipalTransaction(
     databasePool,
     principal,
-    ({ db }) => listActivityEvents(db, principal.workspaceId)
+    async ({ db }) => ({
+      activity:
+        await listActivityEvents(
+          db,
+          principal.workspaceId
+        ),
+      approvals:
+        await listPendingApprovals(
+          db,
+          principal.workspaceId
+        )
+    })
   );
+
+  const canResolveApprovals =
+    principal.capabilities.includes(
+      "approval.resolve"
+    );
 
   const formatter = new Intl.DateTimeFormat("da-DK", {
     timeZone: "Europe/Copenhagen",
@@ -54,6 +75,40 @@ export default async function ActivityPage({
         title="Aktivitet"
         subtitle="Menneskeligt læsbar driftshistorik. Tekniske detaljer hører til i audit-inspektoren."
       />
+
+      {approvals.length > 0 ? (
+        <section className="mb-8">
+          <div className="border-t border-[var(--border-default)]">
+            {approvals.map(
+              (approval) => (
+                <ApprovalCard
+                  key={approval.id}
+                  workspaceSlug={
+                    workspaceSlug
+                  }
+                  canResolve={
+                    canResolveApprovals
+                  }
+                  approval={{
+                    id:
+                      approval.id,
+                    humanSummary:
+                      approval.humanSummary,
+                    consequenceSummary:
+                      approval.consequenceSummary,
+                    reversibility:
+                      approval.reversibility,
+                    requestedByPrincipalType:
+                      approval.requestedByPrincipalType,
+                    expiresAt:
+                      approval.expiresAt.toISOString()
+                  }}
+                />
+              )
+            )}
+          </div>
+        </section>
+      ) : null}
 
       {activity.length > 0 ? (
         <div className="border-t border-[var(--border-default)]">
