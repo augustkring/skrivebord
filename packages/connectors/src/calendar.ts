@@ -22,6 +22,7 @@ export type CalendarSyncEvent = {
   allDay: boolean;
   timezone?: string;
   recurrenceMasterId?: string;
+  recurrenceOriginalStartAt?: string;
   recurrenceRule?: string;
   status: "CONFIRMED" | "CANCELLED";
   sourceUpdatedAt?: string;
