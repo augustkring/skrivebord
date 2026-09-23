@@ -22,6 +22,7 @@ import {
   connectorAccount,
   connectorCredential,
   createCompleteWorkItemAction,
+  getActionStatus,
   getBoundAgentCredential,
   getCalendarMoveTarget,
   getOrCreateConversationBinding,
@@ -1157,6 +1158,60 @@ describeDatabase("database tenant isolation", () => {
         "provider:event:1"
     });
     expect(sideEffects).toBe(1);
+
+    const actionStatus =
+      await withPrincipalTransaction(
+        pool,
+        actor,
+        ({ db }) =>
+          getActionStatus(
+            db,
+            {
+              workspaceId:
+                workspaceA,
+              actionIntentId:
+                replay.actionId!,
+              requestedByPrincipalId:
+                actor.principalId
+            }
+          )
+      );
+
+    expect(
+      actionStatus?.state
+    ).toBe("SUCCEEDED");
+    expect(
+      actionStatus?.execution
+        ?.externalEffectRefs
+    ).toEqual([
+      "provider:event:1"
+    ]);
+
+    const hiddenFromOtherPrincipal =
+      await withPrincipalTransaction(
+        pool,
+        principal(
+          workspaceA,
+          "status-other-principal",
+          "SYSTEM"
+        ),
+        ({ db }) =>
+          getActionStatus(
+            db,
+            {
+              workspaceId:
+                workspaceA,
+              actionIntentId:
+                replay.actionId!,
+              requestedByPrincipalId:
+                "system:someone-else"
+            }
+          )
+      );
+
+    expect(
+      hiddenFromOtherPrincipal
+    ).toBeUndefined();
 
     const executions =
       await withPrincipalTransaction(
