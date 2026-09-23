@@ -12,3 +12,4 @@ export * from "./google-connection";
 export * from "./google-sync-context";
 export * from "./agent-identity";
 export * from "./conversations";
+export * from "./calendar-write";
