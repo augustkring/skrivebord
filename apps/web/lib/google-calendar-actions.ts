@@ -179,7 +179,7 @@ function movePatch(input: {
 
   if (
     command.scope === "SERIES" &&
-    target.recurrenceMasterId
+    target.requestedRecurrenceMasterId
   ) {
     const deltaMs =
       desiredStart.getTime() -
