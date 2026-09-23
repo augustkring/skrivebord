@@ -242,6 +242,8 @@ export async function POST(
         `approval:${approvalId}`,
       approvalId,
       approvalGranted: true,
+      existingIntentId:
+        intent.actionIntentId,
       store
     });
 
