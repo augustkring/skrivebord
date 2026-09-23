@@ -242,6 +242,7 @@ export function calendarMoveFailurePresentation(
       };
 
     case "CALENDAR_EVENT_VERSION_REQUIRED":
+    case "CALENDAR_RECURRENCE_ORIGINAL_START_REQUIRED":
       return {
         humanSummary:
           "Begivenheden skal synkroniseres igen, før den kan ændres.",
