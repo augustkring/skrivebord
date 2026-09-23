@@ -109,6 +109,35 @@ export async function persistCalendarSync(
   }
 
   for (const event of input.result.events) {
+    if (
+      !event.recurrenceMasterId &&
+      (
+        event.status ===
+          "CANCELLED" ||
+        !event.recurrenceRule
+      )
+    ) {
+      await db
+        .delete(calendarEvent)
+        .where(
+          and(
+            eq(
+              calendarEvent.workspaceId,
+              input.workspaceId
+            ),
+            eq(
+              calendarEvent.calendarSourceId,
+              input.calendarSourceId
+            ),
+            eq(
+              calendarEvent
+                .recurrenceMasterId,
+              event.providerEventId
+            )
+          )
+        );
+    }
+
     const [existing] = await db
       .select({
         id: calendarEvent.id,
