@@ -5,6 +5,7 @@ import {
 } from "@skrivebord/actions";
 import {
   getApprovalIntent,
+  markActionIntentApproved,
   persistCalendarWriteResult,
   TransactionalPostgresActionStore,
   withPrincipalTransaction
@@ -212,6 +213,23 @@ export async function POST(
     );
   }
 
+  await withPrincipalTransaction(
+    databasePool,
+    principal,
+    ({ db }) =>
+      markActionIntentApproved(
+        db,
+        {
+          workspaceId:
+            principal.workspaceId,
+          actionIntentId:
+            intent.actionIntentId,
+          approvedByPrincipalId:
+            principal.principalId
+        }
+      )
+  );
+
   const result =
     await executeAction({
       definition:
@@ -220,8 +238,10 @@ export async function POST(
       rawInput:
         intent.parameters,
       idempotencyKey:
+        intent.idempotencyKey ??
         `approval:${approvalId}`,
       approvalId,
+      approvalGranted: true,
       store
     });
 
