@@ -27,6 +27,8 @@ export type OperationalCalendarEvent = {
     string | null;
   recurrenceRule:
     string | null;
+  category: string;
+  status: string;
   provider: string;
   sourceName: string;
   writable: boolean;
@@ -161,43 +163,45 @@ export function OperationalCalendar({
             </p>
 
             <div className="mt-4">
-              <MoveCalendarEvent
-                workspaceSlug={
-                  workspaceSlug
-                }
-                event={{
-                  id:
-                    selected.id,
-                  title:
-                    selected.title,
-                  startAt:
-                    selected.startAt
-                      ? new Date(
-                          selected.startAt
-                        )
-                      : null,
-                  endAt:
-                    selected.endAt
-                      ? new Date(
-                          selected.endAt
-                        )
-                      : null,
-                  allDay:
-                    selected.allDay,
-                  timezone:
-                    selected.timezone,
-                  recurrenceMasterId:
-                    selected
-                      .recurrenceMasterId,
-                  recurrenceRule:
-                    selected
-                      .recurrenceRule,
-                  writable:
-                    selected.writable,
-                  syncState:
-                    selected.syncState
-                }}
-              />
+              {selected.provider ===
+                "GOOGLE" &&
+              selected.writable &&
+              selected.syncState ===
+                "CONNECTED" &&
+              selected.status ===
+                "CONFIRMED" &&
+              !selected.allDay &&
+              selected.startAt &&
+              selected.endAt ? (
+                <MoveCalendarEvent
+                  workspaceSlug={
+                    workspaceSlug
+                  }
+                  event={{
+                    id:
+                      selected.id,
+                    title:
+                      selected.title,
+                    startAt:
+                      selected.startAt,
+                    endAt:
+                      selected.endAt,
+                    timezone:
+                      selected.timezone ??
+                      workspaceTimezone,
+                    recurrenceMasterId:
+                      selected
+                        .recurrenceMasterId,
+                    recurrenceRule:
+                      selected
+                        .recurrenceRule
+                  }}
+                />
+              ) : (
+                <p className="text-xs leading-5 text-[var(--text-muted)]">
+                  Denne begivenhed kan ikke flyttes fra Skrivebord i sin nuværende tilstand.
+                </p>
+              )}
             </div>
           </>
         ) : (
