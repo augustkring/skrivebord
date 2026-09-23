@@ -122,6 +122,157 @@ describe("Action Layer", () => {
     expect(executions).toBe(1);
   });
 
+
+  it("retries a retryable failed execution with the same idempotency key", async () => {
+    const store = new InMemoryActionStore();
+    let executions = 0;
+
+    const retryableDefinition = {
+      id: "calendar.move",
+      input: z.object({
+        workspaceId: z.string(),
+        eventId: z.string()
+      }).strict(),
+      requiredCapabilities: [
+        "today.manage"
+      ],
+      risk: () => "LOW" as const,
+      idempotency: "REQUIRED" as const,
+      classifyFailure: () => ({
+        code: "RATE_LIMITED",
+        summary: "Provider rate limit",
+        retryable: true
+      }),
+      execute: async () => {
+        executions += 1;
+
+        if (executions === 1) {
+          throw new Error(
+            "Provider rate limit"
+          );
+        }
+
+        return {
+          providerEventId:
+            "event-1"
+        };
+      }
+    };
+
+    const first =
+      await executeAction({
+        definition:
+          retryableDefinition,
+        principal: human,
+        rawInput: {
+          workspaceId: "ws_a",
+          eventId: "event-1"
+        },
+        idempotencyKey:
+          "retryable-1",
+        store
+      });
+
+    const retry =
+      await executeAction({
+        definition:
+          retryableDefinition,
+        principal: human,
+        rawInput: {
+          workspaceId: "ws_a",
+          eventId: "event-1"
+        },
+        idempotencyKey:
+          "retryable-1",
+        store
+      });
+
+    expect(first.status).toBe(
+      "FAILED"
+    );
+    expect(retry.status).toBe(
+      "SUCCEEDED"
+    );
+    expect(retry.executionId).toBe(
+      first.executionId
+    );
+    expect(executions).toBe(2);
+    expect(store.intents).toHaveLength(1);
+    expect(
+      store.executions.get(
+        retry.executionId!
+      )?.attemptCount
+    ).toBe(2);
+  });
+
+  it("does not repeat a non-retryable failed external execution", async () => {
+    const store = new InMemoryActionStore();
+    let executions = 0;
+
+    const nonRetryableDefinition = {
+      id: "calendar.move",
+      input: z.object({
+        workspaceId: z.string(),
+        eventId: z.string()
+      }).strict(),
+      requiredCapabilities: [
+        "today.manage"
+      ],
+      risk: () => "LOW" as const,
+      idempotency: "REQUIRED" as const,
+      classifyFailure: () => ({
+        code: "CONFLICT",
+        summary: "Provider version conflict",
+        retryable: false
+      }),
+      execute: async () => {
+        executions += 1;
+        throw new Error(
+          "Provider version conflict"
+        );
+      }
+    };
+
+    const first =
+      await executeAction({
+        definition:
+          nonRetryableDefinition,
+        principal: human,
+        rawInput: {
+          workspaceId: "ws_a",
+          eventId: "event-1"
+        },
+        idempotencyKey:
+          "non-retryable-1",
+        store
+      });
+
+    const retry =
+      await executeAction({
+        definition:
+          nonRetryableDefinition,
+        principal: human,
+        rawInput: {
+          workspaceId: "ws_a",
+          eventId: "event-1"
+        },
+        idempotencyKey:
+          "non-retryable-1",
+        store
+      });
+
+    expect(first.status).toBe(
+      "FAILED"
+    );
+    expect(retry.status).toBe(
+      "FAILED"
+    );
+    expect(retry.executionId).toBe(
+      first.executionId
+    );
+    expect(executions).toBe(1);
+  });
+
   it("rejects idempotency key reuse with changed parameters", async () => {
     const store = new InMemoryActionStore();
 
