@@ -49,6 +49,16 @@ export class TransactionalPostgresActionStore
     );
   }
 
+  getPendingApprovalByIntent(
+    actionIntentId: string
+  ): Promise<{ id: string } | undefined> {
+    return this.run((store) =>
+      store.getPendingApprovalByIntent(
+        actionIntentId
+      )
+    );
+  }
+
   updateIntentState(
     intentId: string,
     state: ActionIntentState
