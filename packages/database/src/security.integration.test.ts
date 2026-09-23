@@ -827,6 +827,9 @@ describeDatabase("database tenant isolation", () => {
       }
     };
 
+    const workItemId =
+      crypto.randomUUID();
+
     const run = () =>
       executeAction({
         definition,
@@ -834,8 +837,7 @@ describeDatabase("database tenant isolation", () => {
         rawInput: {
           workspaceId:
             workspaceA,
-          workItemId:
-            crypto.randomUUID()
+          workItemId
         },
         idempotencyKey:
           `race-${suffix}`,
