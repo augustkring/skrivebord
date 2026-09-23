@@ -1,6 +1,7 @@
 import {
   ConnectorError,
   type CalendarConnector,
+  type CalendarEventPatch,
   type CalendarEventWrite,
   type CalendarSyncEvent,
   type CalendarSyncResult,
@@ -174,7 +175,9 @@ function bodyHeaders(
   };
 }
 
-function eventBody(event: CalendarEventWrite) {
+function eventBody(
+  event: CalendarEventWrite | CalendarEventPatch
+) {
   return {
     summary: event.title,
     description: event.description,
