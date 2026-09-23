@@ -161,6 +161,9 @@ export function OperationalCalendar({
               info.event.id
             );
           }}
+          eventAllow={(dropInfo) =>
+            !dropInfo.allDay
+          }
           eventDrop={(info) => {
             void (async () => {
               const start =
