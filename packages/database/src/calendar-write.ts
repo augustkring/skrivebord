@@ -23,6 +23,7 @@ export type CalendarMoveTarget = {
   requestedStartAt?: Date;
   requestedEndAt?: Date;
   requestedRecurrenceMasterId?: string;
+  requestedRecurrenceOriginalStartAt?: Date;
   localTargetEventId: string;
   calendarSourceId: string;
   connectorAccountId: string;
@@ -70,6 +71,8 @@ async function loadEventWithSource(
         calendarEvent.timezone,
       recurrenceMasterId:
         calendarEvent.recurrenceMasterId,
+      recurrenceOriginalStartAt:
+        calendarEvent.recurrenceOriginalStartAt,
       recurrenceRule:
         calendarEvent.recurrenceRule,
       allDay:
@@ -195,6 +198,9 @@ export async function getCalendarMoveTarget(
     requestedRecurrenceMasterId:
       requested.recurrenceMasterId ??
       undefined,
+    requestedRecurrenceOriginalStartAt:
+      requested.recurrenceOriginalStartAt ??
+      undefined,
     localTargetEventId:
       target.id,
     calendarSourceId:
@@ -285,6 +291,14 @@ export async function persistCalendarWriteResult(
       recurrenceMasterId:
         input.providerResult
           .recurrenceMasterId,
+      recurrenceOriginalStartAt:
+        input.providerResult
+          .recurrenceOriginalStartAt
+          ? new Date(
+              input.providerResult
+                .recurrenceOriginalStartAt
+            )
+          : null,
       recurrenceRule:
         input.providerResult
           .recurrenceRule,
