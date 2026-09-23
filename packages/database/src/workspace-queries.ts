@@ -79,9 +79,11 @@ export async function listCalendarEvents(
   db: SkrivebordDatabase,
   workspaceId: string
 ) {
-  return db
+  const rows = await db
     .select({
       id: calendarEvent.id,
+      providerEventId:
+        calendarEvent.providerEventId,
       title: calendarEvent.title,
       category: calendarEvent.category,
       startAt: calendarEvent.startAt,
@@ -107,6 +109,31 @@ export async function listCalendarEvents(
       eq(calendarEvent.calendarSourceId, calendarSource.id)
     )
     .where(eq(calendarEvent.workspaceId, workspaceId));
+
+  const expandedMasterIds =
+    new Set(
+      rows
+        .map(
+          (event) =>
+            event.recurrenceMasterId
+        )
+        .filter(
+          (
+            value
+          ): value is string =>
+            Boolean(value)
+        )
+    );
+
+  return rows.filter(
+    (event) =>
+      !(
+        event.recurrenceRule &&
+        expandedMasterIds.has(
+          event.providerEventId
+        )
+      )
+  );
 }
 
 
@@ -195,9 +222,11 @@ export async function searchCalendarEvents(
     return [];
   }
 
-  return db
+  const rows = await db
     .select({
       id: calendarEvent.id,
+      providerEventId:
+        calendarEvent.providerEventId,
       title: calendarEvent.title,
       category:
         calendarEvent.category,
@@ -268,4 +297,29 @@ export async function searchCalendarEvents(
         100
       )
     );
+
+  const expandedMasterIds =
+    new Set(
+      rows
+        .map(
+          (event) =>
+            event.recurrenceMasterId
+        )
+        .filter(
+          (
+            value
+          ): value is string =>
+            Boolean(value)
+        )
+    );
+
+  return rows.filter(
+    (event) =>
+      !(
+        event.recurrenceRule &&
+        expandedMasterIds.has(
+          event.providerEventId
+        )
+      )
+  );
 }
