@@ -90,12 +90,7 @@ export class PostgresActionStore implements ActionStore {
         createdAt:
           new Date(intent.createdAt)
       })
-      .onConflictDoNothing({
-        target: [
-          actionIntent.workspaceId,
-          actionIntent.idempotencyKey
-        ]
-      })
+      .onConflictDoNothing()
       .returning({
         id: actionIntent.id
       });
