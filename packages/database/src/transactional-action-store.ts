@@ -83,6 +83,8 @@ export class TransactionalPostgresActionStore
   failExecution(input: {
     executionId: string;
     errorCode?: string;
+    failureSummary?: string;
+    retryable: boolean;
     failedAt: string;
   }): Promise<void> {
     return this.run((store) =>
