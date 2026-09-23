@@ -306,7 +306,7 @@ export class OpenClawGatewayAdapter {
   async connect(): Promise<void> {
     if (
       this.ready &&
-      this.client?.connected
+      this.client
     ) {
       return;
     }
