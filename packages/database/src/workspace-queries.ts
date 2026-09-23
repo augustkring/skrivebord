@@ -83,9 +83,14 @@ export async function listCalendarEvents(
       endDate: calendarEvent.endDate,
       allDay: calendarEvent.allDay,
       timezone: calendarEvent.timezone,
+      recurrenceMasterId:
+        calendarEvent.recurrenceMasterId,
+      recurrenceRule:
+        calendarEvent.recurrenceRule,
       status: calendarEvent.status,
       provider: calendarSource.provider,
       sourceName: calendarSource.displayName,
+      writable: calendarSource.writable,
       syncState: calendarSource.syncState,
       lastSyncedAt: calendarSource.lastSyncedAt
     })
