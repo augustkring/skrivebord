@@ -36,7 +36,7 @@
     "@openclaw/gateway-client": "2026.8.1",
     "@openclaw/gateway-protocol": "2026.8.1",
     "@fullcalendar/react": "7.1.0",
-    "temporal-polyfill": "0.3.0"
+    "temporal-polyfill": "1.0.5"
   },
   "devDependencies": {
     "@types/pg": "8.23.1"
