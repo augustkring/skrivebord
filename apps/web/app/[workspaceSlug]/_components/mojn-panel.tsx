@@ -224,6 +224,50 @@ export function MojnPanel({
   useEffect(() => {
     if (
       !open ||
+      (status !== "READY" &&
+        status !== "RUNNING")
+    ) {
+      return;
+    }
+
+    const query =
+      new URLSearchParams({
+        workspaceSlug,
+        route
+      });
+
+    const events =
+      new EventSource(
+        `/api/agent/events?${query.toString()}`
+      );
+
+    const handleChanged = () => {
+      void loadHistory();
+    };
+
+    events.addEventListener(
+      "changed",
+      handleChanged
+    );
+
+    return () => {
+      events.removeEventListener(
+        "changed",
+        handleChanged
+      );
+      events.close();
+    };
+  }, [
+    loadHistory,
+    open,
+    route,
+    status,
+    workspaceSlug
+  ]);
+
+  useEffect(() => {
+    if (
+      !open ||
       status !== "RUNNING"
     ) {
       return;
