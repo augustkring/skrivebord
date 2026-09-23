@@ -156,6 +156,10 @@ describe("Google calendar move semantics", () => {
             ),
           requestedRecurrenceMasterId:
             "series-master",
+          requestedRecurrenceOriginalStartAt:
+            new Date(
+              "2026-10-02T08:00:00Z"
+            ),
           localTargetEventId:
             "44444444-4444-4444-8444-444444444444",
           providerEventId:
@@ -189,6 +193,98 @@ describe("Google calendar move semantics", () => {
     expect(patch.end.dateTime).toBe(
       "2026-09-25T11:00:00.000Z"
     );
+  });
+
+
+  it("uses originalStartTime when an exception is used to move the whole series", () => {
+    const patch =
+      buildGoogleCalendarMovePatch({
+        target: target({
+          requestedStartAt:
+            new Date(
+              "2026-10-02T09:00:00Z"
+            ),
+          requestedEndAt:
+            new Date(
+              "2026-10-02T10:00:00Z"
+            ),
+          requestedRecurrenceMasterId:
+            "series-master",
+          requestedRecurrenceOriginalStartAt:
+            new Date(
+              "2026-10-02T08:00:00Z"
+            ),
+          localTargetEventId:
+            "44444444-4444-4444-8444-444444444444",
+          providerEventId:
+            "series-master",
+          startAt:
+            new Date(
+              "2026-09-25T08:00:00Z"
+            ),
+          endAt:
+            new Date(
+              "2026-09-25T09:00:00Z"
+            ),
+          recurrenceRule:
+            "RRULE:FREQ=WEEKLY"
+        }),
+        command: {
+          workspaceId:
+            "workspace-a",
+          eventId:
+            "11111111-1111-4111-8111-111111111111",
+          startsAt:
+            "2026-10-02T10:00:00Z",
+          endsAt:
+            "2026-10-02T11:00:00Z",
+          scope: "SERIES"
+        }
+      });
+
+    expect(
+      patch.start.dateTime
+    ).toBe(
+      "2026-09-25T10:00:00.000Z"
+    );
+    expect(
+      patch.end.dateTime
+    ).toBe(
+      "2026-09-25T11:00:00.000Z"
+    );
+  });
+
+  it("rejects series moves from an instance when originalStartTime is missing", () => {
+    expect(() =>
+      buildGoogleCalendarMovePatch({
+        target: target({
+          requestedRecurrenceMasterId:
+            "series-master",
+          requestedRecurrenceOriginalStartAt:
+            undefined,
+          localTargetEventId:
+            "44444444-4444-4444-8444-444444444444",
+          providerEventId:
+            "series-master",
+          recurrenceRule:
+            "RRULE:FREQ=WEEKLY"
+        }),
+        command: {
+          workspaceId:
+            "workspace-a",
+          eventId:
+            "11111111-1111-4111-8111-111111111111",
+          startsAt:
+            "2026-09-25T10:00:00Z",
+          endsAt:
+            "2026-09-25T11:00:00Z",
+          scope: "SERIES"
+        }
+      })
+    ).toMatchObject({
+      code:
+        "CALENDAR_RECURRENCE_ORIGINAL_START_REQUIRED"
+    });
   });
 
   it("rejects moving only one occurrence when the selected row is the recurring master", () => {
