@@ -6,7 +6,8 @@ import {
 import {
   getApprovalIntent,
   persistCalendarWriteResult,
-  TransactionalPostgresActionStore
+  TransactionalPostgresActionStore,
+  withPrincipalTransaction
 } from "@skrivebord/database";
 import { z } from "zod";
 import {
@@ -106,35 +107,20 @@ export async function POST(
       principal
     );
 
-  const approvalIntent =
-    await store.runRead?.(
-      undefined as never
-    );
-
-  void approvalIntent;
-
   const intent =
-    await (async () => {
-      const {
-        withPrincipalTransaction
-      } = await import(
-        "@skrivebord/database"
-      );
-
-      return withPrincipalTransaction(
-        databasePool,
-        principal,
-        ({ db }) =>
-          getApprovalIntent(
-            db,
-            {
-              workspaceId:
-                principal.workspaceId,
-              approvalId
-            }
-          )
-      );
-    })();
+    await withPrincipalTransaction(
+      databasePool,
+      principal,
+      ({ db }) =>
+        getApprovalIntent(
+          db,
+          {
+            workspaceId:
+              principal.workspaceId,
+            approvalId
+          }
+        )
+    );
 
   if (!intent) {
     return Response.json(
@@ -245,12 +231,6 @@ export async function POST(
     result.data
   ) {
     try {
-      const {
-        withPrincipalTransaction
-      } = await import(
-        "@skrivebord/database"
-      );
-
       await withPrincipalTransaction(
         databasePool,
         principal,
