@@ -136,6 +136,69 @@ describe("GoogleCalendarConnector", () => {
     });
   });
 
+
+  it("fetches the current provider event for stale-write reconciliation", async () => {
+    const fetchMock =
+      vi.fn<typeof fetch>()
+        .mockResolvedValue(
+          jsonResponse({
+            id: "event-current",
+            etag: "etag-current",
+            summary:
+              "Opdateret i Google",
+            start: {
+              dateTime:
+                "2026-09-26T12:00:00+02:00",
+              timeZone:
+                "Europe/Copenhagen"
+            },
+            end: {
+              dateTime:
+                "2026-09-26T13:00:00+02:00",
+              timeZone:
+                "Europe/Copenhagen"
+            },
+            updated:
+              "2026-09-23T12:00:00Z"
+          })
+        );
+
+    const connector =
+      new GoogleCalendarConnector(
+        fetchMock
+      );
+
+    const event =
+      await connector.getEvent({
+        accessToken: "token",
+        calendarId: "primary",
+        eventId:
+          "event-current"
+      });
+
+    expect(event).toMatchObject({
+      providerEventId:
+        "event-current",
+      providerVersion:
+        "etag-current",
+      title:
+        "Opdateret i Google",
+      status: "CONFIRMED"
+    });
+
+    const request =
+      fetchMock.mock.calls[0];
+
+    expect(
+      request?.[1]?.method
+    ).toBe("GET");
+    expect(
+      String(request?.[0])
+    ).toContain(
+      "/calendars/primary/events/event-current"
+    );
+  });
+
   it("uses If-Match for concurrency-protected updates", async () => {
     const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(
       jsonResponse({
