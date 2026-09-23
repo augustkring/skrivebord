@@ -29,6 +29,8 @@ export type CalendarMoveTarget = {
   providerVersion?: string;
   title: string;
   description?: string;
+  startAt?: Date;
+  endAt?: Date;
   timezone?: string;
   recurrenceRule?: string;
   recurrenceMasterId?: string;
@@ -57,6 +59,10 @@ async function loadEventWithSource(
       title: calendarEvent.title,
       description:
         calendarEvent.descriptionSanitized,
+      startAt:
+        calendarEvent.startAt,
+      endAt:
+        calendarEvent.endAt,
       timezone:
         calendarEvent.timezone,
       recurrenceMasterId:
@@ -195,6 +201,12 @@ export async function getCalendarMoveTarget(
     title: target.title,
     description:
       target.description ??
+      undefined,
+    startAt:
+      target.startAt ??
+      undefined,
+    endAt:
+      target.endAt ??
       undefined,
     timezone:
       target.timezone ??
