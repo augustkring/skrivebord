@@ -17,7 +17,7 @@ function initialWindow(now: Date): {
 } {
   return {
     timeMin: new Date(
-      now.getTime() - 183 * 24 * 60 * 60 * 1000
+      now.getTime() - 90 * 24 * 60 * 60 * 1000
     ).toISOString(),
     timeMax: new Date(
       now.getTime() + 548 * 24 * 60 * 60 * 1000
