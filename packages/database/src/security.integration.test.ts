@@ -22,6 +22,7 @@ import {
   connectorCredential,
   createCompleteWorkItemAction,
   getBoundAgentCredential,
+  getOrCreateConversationBinding,
   createDatabasePool,
   listTodayItems,
   persistCalendarSync,
