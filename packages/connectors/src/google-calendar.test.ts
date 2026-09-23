@@ -174,6 +174,65 @@ describe("GoogleCalendarConnector", () => {
     expect(init?.method).toBe("PATCH");
   });
 
+
+  it("sends a minimal PATCH when only event timing changes", async () => {
+    const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(
+      jsonResponse({
+        id: "event-2",
+        etag: "v3",
+        summary: "Bevar titel",
+        description: "Bevar beskrivelse",
+        start: {
+          dateTime: "2026-09-26T10:00:00+02:00",
+          timeZone: "Europe/Copenhagen"
+        },
+        end: {
+          dateTime: "2026-09-26T11:00:00+02:00",
+          timeZone: "Europe/Copenhagen"
+        }
+      })
+    );
+
+    const connector = new GoogleCalendarConnector(fetchMock);
+
+    await connector.updateEvent({
+      accessToken: "token",
+      calendarId: "primary",
+      eventId: "event-2",
+      providerVersion: "v2",
+      event: {
+        start: {
+          dateTime: "2026-09-26T10:00:00+02:00",
+          timeZone: "Europe/Copenhagen"
+        },
+        end: {
+          dateTime: "2026-09-26T11:00:00+02:00",
+          timeZone: "Europe/Copenhagen"
+        }
+      }
+    });
+
+    const body = JSON.parse(
+      String(
+        fetchMock.mock.calls[0]?.[1]?.body
+      )
+    ) as Record<string, unknown>;
+
+    expect(body).toEqual({
+      start: {
+        dateTime: "2026-09-26T10:00:00+02:00",
+        timeZone: "Europe/Copenhagen"
+      },
+      end: {
+        dateTime: "2026-09-26T11:00:00+02:00",
+        timeZone: "Europe/Copenhagen"
+      }
+    });
+    expect(body).not.toHaveProperty("summary");
+    expect(body).not.toHaveProperty("description");
+    expect(body).not.toHaveProperty("recurrence");
+  });
+
   it("classifies provider rate limits as retryable", async () => {
     const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(
       new Response(null, { status: 429 })
