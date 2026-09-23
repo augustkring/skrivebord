@@ -554,6 +554,143 @@ describe("Action Layer", () => {
     expect(store.executions.size).toBe(1);
   });
 
+
+  it("retries a transiently failed approved execution on the original intent", async () => {
+    const store =
+      new InMemoryActionStore();
+    let executions = 0;
+
+    const reviewDefinition = {
+      id: "calendar.move",
+      input: z.object({
+        workspaceId: z.string(),
+        eventId: z.string()
+      }).strict(),
+      requiredCapabilities: [
+        "message.send"
+      ],
+      risk: () =>
+        "MEDIUM" as const,
+      idempotency:
+        "REQUIRED" as const,
+      approval: {
+        requiredApproverScope:
+          "OWNER",
+        consequenceSummary:
+          () =>
+            "Flytter kalenderbegivenheden.",
+        reversibility:
+          "PARTIALLY_REVERSIBLE" as const
+      },
+      classifyFailure: () => ({
+        code: "RATE_LIMITED",
+        summary:
+          "Provider rate limit",
+        retryable: true
+      }),
+      execute: async () => {
+        executions += 1;
+
+        if (executions === 1) {
+          throw new Error(
+            "Provider rate limit"
+          );
+        }
+
+        return {
+          moved: true
+        };
+      }
+    };
+
+    const pending =
+      await executeAction({
+        definition:
+          reviewDefinition,
+        principal: agent,
+        rawInput: {
+          workspaceId: "ws_a",
+          eventId: "event-1"
+        },
+        idempotencyKey:
+          "approved-retry-1",
+        store
+      });
+
+    const approvedHuman:
+      PrincipalContext = {
+        ...human,
+        capabilities: [
+          ...human.capabilities,
+          "message.send"
+        ]
+      };
+
+    const firstAttempt =
+      await executeAction({
+        definition:
+          reviewDefinition,
+        principal:
+          approvedHuman,
+        rawInput: {
+          workspaceId: "ws_a",
+          eventId: "event-1"
+        },
+        idempotencyKey:
+          "approved-retry-1",
+        approvalId:
+          pending.approvalId,
+        approvalGranted: true,
+        existingIntentId:
+          pending.actionId,
+        store
+      });
+
+    const retry =
+      await executeAction({
+        definition:
+          reviewDefinition,
+        principal:
+          approvedHuman,
+        rawInput: {
+          workspaceId: "ws_a",
+          eventId: "event-1"
+        },
+        idempotencyKey:
+          "approved-retry-1",
+        approvalId:
+          pending.approvalId,
+        approvalGranted: true,
+        existingIntentId:
+          pending.actionId,
+        store
+      });
+
+    expect(
+      pending.status
+    ).toBe("PENDING_APPROVAL");
+    expect(
+      firstAttempt.status
+    ).toBe("FAILED");
+    expect(
+      retry.status
+    ).toBe("SUCCEEDED");
+    expect(
+      retry.actionId
+    ).toBe(pending.actionId);
+    expect(
+      retry.executionId
+    ).toBe(
+      firstAttempt.executionId
+    );
+    expect(executions).toBe(2);
+    expect(
+      store.executions.get(
+        retry.executionId!
+      )?.attemptCount
+    ).toBe(2);
+  });
+
   it("persists an exact approval object when policy requires review", async () => {
     const store = new InMemoryActionStore();
     const sendDefinition = {
