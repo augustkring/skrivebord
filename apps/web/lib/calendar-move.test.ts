@@ -74,6 +74,73 @@ describe("Google calendar move semantics", () => {
     });
   });
 
+
+  it("moves a concrete recurring instance without shifting the series master", () => {
+    const patch =
+      buildGoogleCalendarMovePatch({
+        target: target({
+          providerEventId:
+            "instance-20260925",
+          recurrenceMasterId:
+            "series-master",
+          recurrenceRule:
+            undefined
+        }),
+        command: {
+          workspaceId:
+            "workspace-a",
+          eventId:
+            "11111111-1111-4111-8111-111111111111",
+          startsAt:
+            "2026-09-25T14:00:00Z",
+          endsAt:
+            "2026-09-25T15:00:00Z",
+          scope: "OCCURRENCE"
+        }
+      });
+
+    expect(patch).toEqual({
+      start: {
+        dateTime:
+          "2026-09-25T14:00:00.000Z",
+        timeZone:
+          "Europe/Copenhagen"
+      },
+      end: {
+        dateTime:
+          "2026-09-25T15:00:00.000Z",
+        timeZone:
+          "Europe/Copenhagen"
+      }
+    });
+  });
+
+  it("requires a provider version before a write can be attempted", () => {
+    expect(() =>
+      buildGoogleCalendarMovePatch({
+        target: target({
+          providerVersion:
+            undefined
+        }),
+        command: {
+          workspaceId:
+            "workspace-a",
+          eventId:
+            "11111111-1111-4111-8111-111111111111",
+          startsAt:
+            "2026-09-25T10:00:00Z",
+          endsAt:
+            "2026-09-25T11:00:00Z",
+          scope: "OCCURRENCE"
+        }
+      })
+    ).toMatchObject({
+      code:
+        "CALENDAR_EVENT_VERSION_REQUIRED",
+      retryable: false
+    });
+  });
+
   it("moves the recurring master by the selected occurrence delta for SERIES", () => {
     const patch =
       buildGoogleCalendarMovePatch({
