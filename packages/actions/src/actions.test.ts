@@ -171,6 +171,67 @@ describe("Action Layer", () => {
   });
 
 
+
+  it("rejects idempotency key reuse across different action ids even with identical parameters", async () => {
+    const store =
+      new InMemoryActionStore();
+
+    const input = z.object({
+      workspaceId: z.string(),
+      targetId: z.string()
+    }).strict();
+
+    const firstDefinition = {
+      id: "calendar.move",
+      input,
+      requiredCapabilities: [
+        "today.manage"
+      ],
+      risk: () => "LOW" as const,
+      idempotency:
+        "REQUIRED" as const,
+      execute: async () => ({
+        ok: true
+      })
+    };
+
+    const secondDefinition = {
+      ...firstDefinition,
+      id: "calendar.delete"
+    };
+
+    await executeAction({
+      definition:
+        firstDefinition,
+      principal: human,
+      rawInput: {
+        workspaceId: "ws_a",
+        targetId: "event-1"
+      },
+      idempotencyKey:
+        "shared-key",
+      store
+    });
+
+    const conflict =
+      await executeAction({
+        definition:
+          secondDefinition,
+        principal: human,
+        rawInput: {
+          workspaceId: "ws_a",
+          targetId: "event-1"
+        },
+        idempotencyKey:
+          "shared-key",
+        store
+      });
+
+    expect(
+      conflict.status
+    ).toBe("CONFLICT");
+  });
+
   it("reuses the same pending approval for an idempotent review-required action", async () => {
     const store =
       new InMemoryActionStore();
