@@ -15,6 +15,9 @@ import { z } from "zod";
 import {
   createMoveGoogleCalendarEventAction
 } from "@/lib/google-calendar-actions";
+import {
+  calendarMoveFailurePresentation
+} from "@/lib/calendar-move";
 import { databasePool } from "@/lib/database";
 import {
   resolveWorkspaceHumanPrincipal
@@ -360,17 +363,55 @@ export async function POST(
     "FAILED"
   );
 
+  const actionStatus =
+    await withPrincipalTransaction(
+      databasePool,
+      principal,
+      ({ db }) =>
+        getActionStatus(
+          db,
+          {
+            workspaceId:
+              principal.workspaceId,
+            actionIntentId:
+              intent.actionIntentId
+          }
+        )
+    );
+
+  const presentation =
+    calendarMoveFailurePresentation(
+      actionStatus?.execution
+        ?.errorCode ??
+        undefined,
+      actionStatus?.execution
+        ?.retryable ??
+        false
+    );
+
   return Response.json(
     {
       ...result,
-      approvalId
+      approvalId,
+      humanSummary:
+        presentation.humanSummary,
+      ...(presentation.recovery
+        ? {
+            recovery:
+              presentation.recovery
+          }
+        : {})
     },
     {
       status:
-        result.status ===
-        "CONFLICT"
+        actionStatus?.execution
+          ?.errorCode ===
+        "CALENDAR_PROVIDER_CONFLICT"
           ? 409
-          : 502
+          : result.status ===
+              "CONFLICT"
+            ? 409
+            : 502
     }
   );
 }
