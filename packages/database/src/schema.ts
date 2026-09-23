@@ -250,10 +250,16 @@ export const conversationBinding = pgTable("conversation_binding", {
   agentId: uuid("agent_id").notNull(),
   contextType: text("context_type").notNull(),
   contextId: uuid("context_id"),
+  contextKey: text("context_key").notNull(),
   openclawSessionKey: text("openclaw_session_key").notNull(),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   lastUsedAt: timestamp("last_used_at", { withTimezone: true }).notNull().defaultNow()
 }, (t) => [
+  uniqueIndex("conversation_binding_context_unique").on(
+    t.workspaceId,
+    t.agentId,
+    t.contextKey
+  ),
   uniqueIndex("conversation_binding_session_unique").on(
     t.workspaceId,
     t.openclawSessionKey
