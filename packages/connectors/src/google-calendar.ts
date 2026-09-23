@@ -7,6 +7,7 @@ import {
   type CalendarSyncResult,
   type CreateCalendarEventInput,
   type DeleteCalendarEventInput,
+  type GetCalendarEventInput,
   type IncrementalCalendarSyncInput,
   type InitialCalendarSyncInput,
   type UpdateCalendarEventInput
@@ -317,6 +318,33 @@ export class GoogleCalendarConnector
 
     if (!response.ok) {
       throw connectorError(response, "calendar.events.insert");
+    }
+
+    return normalizeGoogleEvent(
+      (await response.json()) as GoogleEvent
+    );
+  }
+
+  async getEvent(
+    input: GetCalendarEventInput
+  ): Promise<CalendarSyncEvent> {
+    const response =
+      await this.fetchImpl(
+        `${GOOGLE_CALENDAR_BASE}/calendars/${encodeURIComponent(input.calendarId)}/events/${encodeURIComponent(input.eventId)}`,
+        {
+          method: "GET",
+          headers:
+            authHeaders(
+              input.accessToken
+            )
+        }
+      );
+
+    if (!response.ok) {
+      throw connectorError(
+        response,
+        "calendar.events.get"
+      );
     }
 
     return normalizeGoogleEvent(
