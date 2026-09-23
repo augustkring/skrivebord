@@ -2,6 +2,7 @@ import {
   executeAction
 } from "@skrivebord/actions";
 import {
+  getActionStatus,
   persistCalendarWriteResult,
   TransactionalPostgresActionStore,
   withPrincipalTransaction
@@ -10,6 +11,9 @@ import { z } from "zod";
 import {
   createMoveGoogleCalendarEventAction
 } from "@/lib/google-calendar-actions";
+import {
+  calendarMoveFailurePresentation
+} from "@/lib/calendar-move";
 import { databasePool } from "@/lib/database";
 import {
   resolveWorkspaceHumanPrincipal
@@ -160,6 +164,60 @@ export async function POST(
         );
       }
     }
+  }
+
+  if (
+    result.status === "FAILED" &&
+    result.actionId
+  ) {
+    const state =
+      await withPrincipalTransaction(
+        databasePool,
+        principal,
+        ({ db }) =>
+          getActionStatus(
+            db,
+            {
+              workspaceId:
+                principal.workspaceId,
+              actionIntentId:
+                result.actionId!
+            }
+          )
+      );
+
+    const presentation =
+      calendarMoveFailurePresentation(
+        state?.execution
+          ?.errorCode ??
+          undefined,
+        state?.execution
+          ?.retryable ??
+          false
+      );
+
+    return Response.json(
+      {
+        ...result,
+        humanSummary:
+          presentation
+            .humanSummary,
+        ...(presentation.recovery
+          ? {
+              recovery:
+                presentation.recovery
+            }
+          : {})
+      },
+      {
+        status:
+          state?.execution
+            ?.errorCode ===
+          "CALENDAR_PROVIDER_CONFLICT"
+            ? 409
+            : 502
+      }
+    );
   }
 
   const statusCode =
