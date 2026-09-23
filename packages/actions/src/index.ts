@@ -41,6 +41,8 @@ export type ActionDefinition<Input, Result> = {
   approval?: ActionApprovalDefinition<Input>;
   reversible?: boolean;
   externalCommunication?: boolean;
+  idempotency?: "OPTIONAL" | "REQUIRED";
+  externalEffectRefs?: (result: Result) => string[];
 };
 
 export type ActionIntentState =
@@ -64,6 +66,47 @@ export type ActionIntentRecord = {
   createdAt: string;
 };
 
+export type ActionExecutionState =
+  | "PENDING"
+  | "RUNNING"
+  | "SUCCEEDED"
+  | "FAILED";
+
+export type ActionExecutionRecord = {
+  id: string;
+  workspaceId: string;
+  actionIntentId: string;
+  idempotencyKey: string;
+  parametersDigest: string;
+  state: ActionExecutionState;
+  createdAt: string;
+};
+
+export type ActionExecutionClaim =
+  | {
+      type: "CLAIMED";
+      executionId: string;
+    }
+  | {
+      type: "REPLAY";
+      executionId: string;
+      result: unknown;
+      externalEffectRefs: string[];
+    }
+  | {
+      type: "IN_PROGRESS";
+      executionId: string;
+    }
+  | {
+      type: "FAILED";
+      executionId: string;
+      errorCode?: string;
+    }
+  | {
+      type: "KEY_REUSED";
+      executionId: string;
+    };
+
 export type AuditWrite = {
   workspaceId: string;
   actorId: string;
@@ -80,11 +123,29 @@ export type AuditWrite = {
 export interface ActionStore extends ApprovalStore {
   createIntent(intent: ActionIntentRecord): Promise<void>;
   updateIntentState(intentId: string, state: ActionIntentState): Promise<void>;
+  claimExecution(execution: ActionExecutionRecord): Promise<ActionExecutionClaim>;
+  markExecutionRunning(executionId: string, startedAt: string): Promise<void>;
+  completeExecution(input: {
+    executionId: string;
+    result: unknown;
+    externalEffectRefs: string[];
+    completedAt: string;
+  }): Promise<void>;
+  failExecution(input: {
+    executionId: string;
+    errorCode?: string;
+    failedAt: string;
+  }): Promise<void>;
   appendAudit(event: AuditWrite): Promise<void>;
 }
 
 export class InMemoryActionStore implements ActionStore {
   intents: ActionIntentRecord[] = [];
+  executions = new Map<string, ActionExecutionRecord & {
+    result?: unknown;
+    externalEffectRefs?: string[];
+    errorCode?: string;
+  }>();
   approvals = new Map<string, ApprovalRecord>();
   audit: AuditWrite[] = [];
 
@@ -96,6 +157,90 @@ export class InMemoryActionStore implements ActionStore {
     const intent = this.intents.find((candidate) => candidate.id === intentId);
     if (!intent) throw new Error("ACTION_INTENT_NOT_FOUND");
     intent.state = state;
+  }
+
+  async claimExecution(
+    execution: ActionExecutionRecord
+  ): Promise<ActionExecutionClaim> {
+    const existing = [...this.executions.values()].find(
+      (candidate) =>
+        candidate.workspaceId === execution.workspaceId &&
+        candidate.idempotencyKey === execution.idempotencyKey
+    );
+
+    if (!existing) {
+      this.executions.set(execution.id, execution);
+      return {
+        type: "CLAIMED",
+        executionId: execution.id
+      };
+    }
+
+    if (
+      existing.parametersDigest !==
+      execution.parametersDigest
+    ) {
+      return {
+        type: "KEY_REUSED",
+        executionId: existing.id
+      };
+    }
+
+    if (existing.state === "SUCCEEDED") {
+      return {
+        type: "REPLAY",
+        executionId: existing.id,
+        result: existing.result,
+        externalEffectRefs:
+          existing.externalEffectRefs ?? []
+      };
+    }
+
+    if (existing.state === "FAILED") {
+      return {
+        type: "FAILED",
+        executionId: existing.id,
+        errorCode: existing.errorCode
+      };
+    }
+
+    return {
+      type: "IN_PROGRESS",
+      executionId: existing.id
+    };
+  }
+
+  async markExecutionRunning(
+    executionId: string,
+    _startedAt: string
+  ) {
+    const execution = this.executions.get(executionId);
+    if (!execution) throw new Error("ACTION_EXECUTION_NOT_FOUND");
+    execution.state = "RUNNING";
+  }
+
+  async completeExecution(input: {
+    executionId: string;
+    result: unknown;
+    externalEffectRefs: string[];
+    completedAt: string;
+  }) {
+    const execution = this.executions.get(input.executionId);
+    if (!execution) throw new Error("ACTION_EXECUTION_NOT_FOUND");
+    execution.state = "SUCCEEDED";
+    execution.result = input.result;
+    execution.externalEffectRefs = input.externalEffectRefs;
+  }
+
+  async failExecution(input: {
+    executionId: string;
+    errorCode?: string;
+    failedAt: string;
+  }) {
+    const execution = this.executions.get(input.executionId);
+    if (!execution) throw new Error("ACTION_EXECUTION_NOT_FOUND");
+    execution.state = "FAILED";
+    execution.errorCode = input.errorCode;
   }
 
   async createApproval(approval: ApprovalRecord) {
@@ -157,6 +302,7 @@ export async function executeAction<Input, Result>(args: {
   store: ActionStore;
   now?: Date;
   explicitlyDelegated?: boolean;
+  idempotencyKey?: string;
 }): Promise<ToolResult<Result>> {
   const parsed = args.definition.input.safeParse(args.rawInput);
   if (!parsed.success) {
@@ -298,21 +444,140 @@ export async function executeAction<Input, Result>(args: {
     };
   }
 
-  try {
-    const result = await args.definition.execute(ctx);
-    await args.store.updateIntentState(id, "SUCCEEDED");
-    await args.store.appendAudit({
-      ...baseAudit,
-      outcome: "SUCCEEDED"
-    });
+  const usesIdempotency =
+    args.definition.idempotency === "REQUIRED" ||
+    Boolean(args.idempotencyKey);
 
-    return {
-      status: "SUCCEEDED",
-      humanSummary: summary,
-      actionId: id,
-      data: result
+  let executionId: string | undefined;
+
+  if (usesIdempotency) {
+    if (!args.idempotencyKey) {
+      await args.store.updateIntentState(id, "FAILED");
+      await args.store.appendAudit({
+        ...baseAudit,
+        outcome: "IDEMPOTENCY_REQUIRED"
+      });
+
+      return {
+        status: "FAILED",
+        humanSummary:
+          "Handlingen kræver en idempotency-key.",
+        actionId: id
+      };
+    }
+
+    const execution = {
+      id: newId(),
+      workspaceId: args.principal.workspaceId,
+      actionIntentId: id,
+      idempotencyKey: args.idempotencyKey,
+      parametersDigest,
+      state: "PENDING" as const,
+      createdAt: now.toISOString()
     };
-  } catch {
+
+    const claim =
+      await args.store.claimExecution(
+        execution
+      );
+
+    executionId = claim.executionId;
+
+    if (claim.type === "KEY_REUSED") {
+      await args.store.updateIntentState(id, "FAILED");
+      await args.store.appendAudit({
+        ...baseAudit,
+        outcome:
+          "IDEMPOTENCY_KEY_REUSED_WITH_DIFFERENT_PAYLOAD"
+      });
+
+      return {
+        status: "CONFLICT",
+        humanSummary:
+          "Idempotency-keyen er allerede brugt til en anden handling.",
+        actionId: id,
+        executionId
+      };
+    }
+
+    if (claim.type === "REPLAY") {
+      await args.store.updateIntentState(id, "SUCCEEDED");
+      await args.store.appendAudit({
+        ...baseAudit,
+        outcome: "REPLAYED_SUCCEEDED_EXECUTION"
+      });
+
+      return {
+        status: "SUCCEEDED",
+        humanSummary: summary,
+        actionId: id,
+        executionId,
+        data: claim.result as Result
+      };
+    }
+
+    if (claim.type === "IN_PROGRESS") {
+      await args.store.appendAudit({
+        ...baseAudit,
+        outcome: "IDEMPOTENT_EXECUTION_IN_PROGRESS"
+      });
+
+      return {
+        status: "CONFLICT",
+        humanSummary:
+          "Den samme handling er allerede i gang.",
+        actionId: id,
+        executionId,
+        recovery: {
+          label: "Kontrollér status",
+          action: "actions.get_status"
+        }
+      };
+    }
+
+    if (claim.type === "FAILED") {
+      await args.store.updateIntentState(id, "FAILED");
+      await args.store.appendAudit({
+        ...baseAudit,
+        outcome: "PREVIOUS_EXECUTION_FAILED"
+      });
+
+      return {
+        status: "FAILED",
+        humanSummary:
+          "En tidligere execution med samme idempotency-key fejlede.",
+        actionId: id,
+        executionId,
+        recovery: {
+          label: "Gennemgå fejlen",
+          action: "actions.get_status"
+        }
+      };
+    }
+
+    await args.store.markExecutionRunning(
+      executionId,
+      now.toISOString()
+    );
+  }
+
+  let result: Result;
+
+  try {
+    result =
+      await args.definition.execute(ctx);
+  } catch (error) {
+    if (executionId) {
+      await args.store.failExecution({
+        executionId,
+        errorCode:
+          error instanceof Error
+            ? error.message.slice(0, 200)
+            : "ACTION_EXECUTION_FAILED",
+        failedAt: new Date().toISOString()
+      });
+    }
+
     await args.store.updateIntentState(id, "FAILED");
     await args.store.appendAudit({
       ...baseAudit,
@@ -321,12 +586,60 @@ export async function executeAction<Input, Result>(args: {
 
     return {
       status: "FAILED",
-      humanSummary: "Handlingen kunne ikke gennemføres.",
+      humanSummary:
+        "Handlingen kunne ikke gennemføres.",
       actionId: id,
+      executionId,
       recovery: {
-        label: "Prøv igen",
-        action: args.definition.id
+        label: "Gennemgå fejlen",
+        action: "actions.get_status"
       }
     };
   }
+
+  if (executionId) {
+    try {
+      await args.store.completeExecution({
+        executionId,
+        result,
+        externalEffectRefs:
+          args.definition.externalEffectRefs?.(
+            result
+          ) ?? [],
+        completedAt: new Date().toISOString()
+      });
+    } catch {
+      await args.store.appendAudit({
+        ...baseAudit,
+        outcome:
+          "EXTERNAL_EFFECT_COMPLETED_PERSISTENCE_UNCONFIRMED"
+      });
+
+      return {
+        status: "FAILED",
+        humanSummary:
+          "Handlingen blev udført, men resultatet kunne ikke bekræftes i Skrivebord. Brug samme idempotency-key ved statuskontrol.",
+        actionId: id,
+        executionId,
+        recovery: {
+          label: "Kontrollér status",
+          action: "actions.get_status"
+        }
+      };
+    }
+  }
+
+  await args.store.updateIntentState(id, "SUCCEEDED");
+  await args.store.appendAudit({
+    ...baseAudit,
+    outcome: "SUCCEEDED"
+  });
+
+  return {
+    status: "SUCCEEDED",
+    humanSummary: summary,
+    actionId: id,
+    executionId,
+    data: result
+  };
 }
