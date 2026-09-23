@@ -106,6 +106,8 @@ export class PostgresActionStore implements ActionStore {
       await this.db
         .select({
           id: actionIntent.id,
+          actionId:
+            actionIntent.actionId,
           state:
             actionIntent.state,
           parametersDigest:
@@ -133,8 +135,10 @@ export class PostgresActionStore implements ActionStore {
     }
 
     if (
+      existing.actionId !==
+        intent.actionId ||
       existing.parametersDigest !==
-      intent.parametersDigest
+        intent.parametersDigest
     ) {
       return {
         type: "KEY_REUSED",
