@@ -38,6 +38,8 @@ export function ApprovalCard({
     >(null);
   const [message, setMessage] =
     useState("");
+  const [retryOnly, setRetryOnly] =
+    useState(false);
 
   async function decide(
     decision:
@@ -68,6 +70,10 @@ export function ApprovalCard({
       | {
           status?: string;
           humanSummary?: string;
+          recovery?: {
+            label: string;
+            action: string;
+          };
         }
       | null;
 
@@ -77,9 +83,21 @@ export function ApprovalCard({
           "Godkendelsen kunne ikke behandles."
       );
       setPending(null);
+
+      if (
+        result?.recovery
+          ?.action ===
+        "calendar.move_event"
+      ) {
+        setRetryOnly(true);
+        return;
+      }
+
+      router.refresh();
       return;
     }
 
+    setRetryOnly(false);
     setMessage(
       result?.humanSummary ??
         (decision === "APPROVE"
@@ -137,6 +155,7 @@ export function ApprovalCard({
 
         {canResolve ? (
           <div className="flex shrink-0 gap-2">
+            {!retryOnly ? (
             <button
               type="button"
               disabled={
@@ -164,6 +183,7 @@ export function ApprovalCard({
               )}
               Afvis
             </button>
+            ) : null}
 
             <button
               type="button"
@@ -190,7 +210,9 @@ export function ApprovalCard({
                   aria-hidden="true"
                 />
               )}
-              Godkend
+              {retryOnly
+                ? "Prøv igen"
+                : "Godkend"}
             </button>
           </div>
         ) : null}
