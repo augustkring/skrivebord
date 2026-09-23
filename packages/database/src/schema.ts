@@ -307,6 +307,8 @@ export const actionIntent = pgTable("action_intent", {
   riskLevel: text("risk_level").notNull(),
   policyDecision: text("policy_decision").notNull(),
   state: actionState("state").notNull().default("PENDING"),
+  approvedAt: timestamp("approved_at", { withTimezone: true }),
+  approvedByPrincipalId: text("approved_by_principal_id"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   expiresAt: timestamp("expires_at", { withTimezone: true })
 }, (t) => [
