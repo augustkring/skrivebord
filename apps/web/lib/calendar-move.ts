@@ -110,15 +110,20 @@ export function buildGoogleCalendarMovePatch(input: {
   const desiredEnd =
     new Date(command.endsAt);
 
-  const requestedDuration =
-    target.requestedEndAt.getTime() -
-    target.requestedStartAt.getTime();
+  const baselineDuration =
+    command.scope === "SERIES" &&
+    target.requestedRecurrenceMasterId
+      ? target.endAt.getTime() -
+        target.startAt.getTime()
+      : target.requestedEndAt.getTime() -
+        target.requestedStartAt.getTime();
+
   const desiredDuration =
     desiredEnd.getTime() -
     desiredStart.getTime();
 
   if (
-    requestedDuration !==
+    baselineDuration !==
     desiredDuration
   ) {
     throw new CalendarMoveError(
@@ -136,9 +141,21 @@ export function buildGoogleCalendarMovePatch(input: {
     command.scope === "SERIES" &&
     target.requestedRecurrenceMasterId
   ) {
+    if (
+      !target
+        .requestedRecurrenceOriginalStartAt
+    ) {
+      throw new CalendarMoveError(
+        "CALENDAR_RECURRENCE_ORIGINAL_START_REQUIRED",
+        "Den valgte forekomst skal synkroniseres igen, før hele serien kan flyttes."
+      );
+    }
+
     const deltaMs =
       desiredStart.getTime() -
-      target.requestedStartAt.getTime();
+      target
+        .requestedRecurrenceOriginalStartAt
+        .getTime();
 
     nextStart = new Date(
       target.startAt.getTime() +
