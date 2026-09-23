@@ -24,4 +24,4 @@ export const CompleteWorkItemInputSchema = z.object({ workItemId: z.string().min
 export type CompleteWorkItemInput = z.infer<typeof CompleteWorkItemInputSchema>;
 export const MoveCalendarEventInputSchema = z.object({ eventId: z.string().min(1), workspaceId: z.string().min(1), startsAt: z.string().datetime({ offset: true }), endsAt: z.string().datetime({ offset: true }), scope: z.enum(["OCCURRENCE", "SERIES"]) }).strict();
 export type MoveCalendarEventInput = z.infer<typeof MoveCalendarEventInputSchema>;
-export type ToolResult<T> = { status: "SUCCEEDED" | "PENDING_APPROVAL" | "DENIED" | "FAILED" | "CONFLICT"; humanSummary: string; actionId?: string; approvalId?: string; evidence?: WorkEvidence[]; data?: T; recovery?: { label: string; action: string } };
+export type ToolResult<T> = { status: "SUCCEEDED" | "PENDING_APPROVAL" | "DENIED" | "FAILED" | "CONFLICT"; humanSummary: string; actionId?: string; executionId?: string; approvalId?: string; evidence?: WorkEvidence[]; data?: T; recovery?: { label: string; action: string } };
