@@ -37,6 +37,7 @@ export async function getOrCreateConversationBinding(
   input: {
     workspaceId: string;
     agentId: string;
+    runtimeAgentKey: string;
     context: ConversationContext;
     now?: Date;
   }
@@ -57,7 +58,7 @@ export async function getOrCreateConversationBinding(
       contextId,
       contextKey: key,
       openclawSessionKey:
-        `skrivebord:${crypto.randomUUID()}`,
+        `agent:${input.runtimeAgentKey}:skrivebord-${crypto.randomUUID()}`,
       lastUsedAt: now
     })
     .onConflictDoUpdate({
