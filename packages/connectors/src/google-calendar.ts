@@ -10,6 +10,7 @@ import {
   type GetCalendarEventInput,
   type IncrementalCalendarSyncInput,
   type InitialCalendarSyncInput,
+  type ListCalendarEventInstancesInput,
   type UpdateCalendarEventInput
 } from "./calendar";
 
@@ -353,6 +354,83 @@ export class GoogleCalendarConnector
     return normalizeGoogleEvent(
       (await response.json()) as GoogleEvent
     );
+  }
+
+  async listEventInstances(
+    input: ListCalendarEventInstancesInput
+  ): Promise<CalendarSyncEvent[]> {
+    const events:
+      CalendarSyncEvent[] = [];
+    let pageToken:
+      | string
+      | undefined;
+
+    do {
+      const params =
+        new URLSearchParams({
+          maxResults: "2500",
+          showDeleted: "true"
+        });
+
+      if (input.timeMin) {
+        params.set(
+          "timeMin",
+          input.timeMin
+        );
+      }
+
+      if (input.timeMax) {
+        params.set(
+          "timeMax",
+          input.timeMax
+        );
+      }
+
+      if (pageToken) {
+        params.set(
+          "pageToken",
+          pageToken
+        );
+      }
+
+      const response =
+        await this.fetchImpl(
+          `${GOOGLE_CALENDAR_BASE}/calendars/${encodeURIComponent(input.calendarId)}/events/${encodeURIComponent(input.eventId)}/instances?${params.toString()}`,
+          {
+            method: "GET",
+            headers:
+              authHeaders(
+                input.accessToken
+              )
+          }
+        );
+
+      if (!response.ok) {
+        throw connectorError(
+          response,
+          "calendar.events.instances"
+        );
+      }
+
+      const page =
+        (await response.json()) as GoogleEventsPage;
+
+      for (
+        const event of
+        page.items ?? []
+      ) {
+        events.push(
+          normalizeGoogleEvent(
+            event
+          )
+        );
+      }
+
+      pageToken =
+        page.nextPageToken;
+    } while (pageToken);
+
+    return events;
   }
 
   async updateEvent(
