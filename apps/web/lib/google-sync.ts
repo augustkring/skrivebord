@@ -25,6 +25,101 @@ function initialWindow(now: Date): {
   };
 }
 
+async function expandRecurringInstances(input: {
+  connector: GoogleCalendarConnector;
+  accessToken: string;
+  calendarId: string;
+  result: Awaited<
+    ReturnType<
+      GoogleCalendarConnector["initialSync"]
+    >
+  >;
+  now: Date;
+}) {
+  const masters =
+    input.result.events.filter(
+      (event) =>
+        Boolean(
+          event.recurrenceRule
+        ) &&
+        !event
+          .recurrenceMasterId &&
+        event.status ===
+          "CONFIRMED"
+    );
+
+  if (masters.length === 0) {
+    return {
+      result: input.result,
+      replaceSeriesMasterIds:
+        [] as string[]
+    };
+  }
+
+  const window =
+    initialWindow(input.now);
+
+  const expanded =
+    await Promise.all(
+      masters.map(
+        async (master) => ({
+          masterId:
+            master.providerEventId,
+          instances:
+            await input.connector
+              .listEventInstances({
+                accessToken:
+                  input.accessToken,
+                calendarId:
+                  input.calendarId,
+                eventId:
+                  master
+                    .providerEventId,
+                ...window
+              })
+        })
+      )
+    );
+
+  const byProviderId =
+    new Map(
+      input.result.events.map(
+        (event) => [
+          event.providerEventId,
+          event
+        ]
+      )
+    );
+
+  for (
+    const series of expanded
+  ) {
+    for (
+      const instance of
+      series.instances
+    ) {
+      byProviderId.set(
+        instance.providerEventId,
+        instance
+      );
+    }
+  }
+
+  return {
+    result: {
+      ...input.result,
+      events: [
+        ...byProviderId.values()
+      ]
+    },
+    replaceSeriesMasterIds:
+      expanded.map(
+        (series) =>
+          series.masterId
+      )
+  };
+}
+
 export type GoogleCalendarSyncSummary = {
   connectorAccountId: string;
   calendarsAttempted: number;
@@ -141,6 +236,18 @@ export async function runGoogleCalendarSync(input: {
         });
       }
 
+      const expanded =
+        await expandRecurringInstances({
+          connector,
+          accessToken:
+            tokens.accessToken,
+          calendarId:
+            source.providerCalendarId,
+          result:
+            syncResult,
+          now
+        });
+
       const persisted =
         await withPrincipalTransaction(
           databasePool,
@@ -155,7 +262,11 @@ export async function runGoogleCalendarSync(input: {
                 source.providerCalendarId,
               provider: "GOOGLE",
               mode,
-              result: syncResult,
+              result:
+                expanded.result,
+              replaceSeriesMasterIds:
+                expanded
+                  .replaceSeriesMasterIds,
               protectCursor: (raw) =>
                 protector.protect(raw),
               now
