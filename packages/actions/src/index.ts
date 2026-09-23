@@ -529,6 +529,17 @@ export async function executeAction<Input, Result>(args: {
       intentClaim.type ===
       "KEY_REUSED"
     ) {
+      await args.store.appendAudit({
+        ...auditBase(
+          args.principal,
+          args.definition.id,
+          id,
+          now.toISOString()
+        ),
+        outcome:
+          "IDEMPOTENCY_KEY_REUSED_WITH_DIFFERENT_PAYLOAD"
+      });
+
       return {
         status: "CONFLICT",
         humanSummary:
