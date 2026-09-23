@@ -71,6 +71,7 @@ export type ActionIntentRecord = {
   id: string;
   workspaceId: string;
   actionId: string;
+  idempotencyKey?: string;
   requestedByPrincipalId: string;
   requestedByPrincipalType: PrincipalContext["principalType"];
   parameters: unknown;
@@ -138,8 +139,25 @@ export type AuditWrite = {
   metadata?: Record<string, unknown>;
 };
 
+export type ActionIntentClaim =
+  | {
+      type: "CLAIMED";
+      intentId: string;
+    }
+  | {
+      type: "EXISTING";
+      intentId: string;
+      state: ActionIntentState;
+      parametersDigest: string;
+    }
+  | {
+      type: "KEY_REUSED";
+      intentId: string;
+    };
+
 export interface ActionStore extends ApprovalStore {
   createIntent(intent: ActionIntentRecord): Promise<void>;
+  claimIntent(intent: ActionIntentRecord): Promise<ActionIntentClaim>;
   updateIntentState(intentId: string, state: ActionIntentState): Promise<void>;
   claimExecution(execution: ActionExecutionRecord): Promise<ActionExecutionClaim>;
   markExecutionRunning(executionId: string, startedAt: string): Promise<void>;
@@ -174,6 +192,53 @@ export class InMemoryActionStore implements ActionStore {
 
   async createIntent(intent: ActionIntentRecord) {
     this.intents.push(intent);
+  }
+
+  async claimIntent(
+    intent: ActionIntentRecord
+  ): Promise<ActionIntentClaim> {
+    if (!intent.idempotencyKey) {
+      this.intents.push(intent);
+      return {
+        type: "CLAIMED",
+        intentId: intent.id
+      };
+    }
+
+    const existing =
+      this.intents.find(
+        (candidate) =>
+          candidate.workspaceId ===
+            intent.workspaceId &&
+          candidate.idempotencyKey ===
+            intent.idempotencyKey
+      );
+
+    if (!existing) {
+      this.intents.push(intent);
+      return {
+        type: "CLAIMED",
+        intentId: intent.id
+      };
+    }
+
+    if (
+      existing.parametersDigest !==
+      intent.parametersDigest
+    ) {
+      return {
+        type: "KEY_REUSED",
+        intentId: existing.id
+      };
+    }
+
+    return {
+      type: "EXISTING",
+      intentId: existing.id,
+      state: existing.state,
+      parametersDigest:
+        existing.parametersDigest
+    };
   }
 
   async updateIntentState(intentId: string, state: ActionIntentState) {
