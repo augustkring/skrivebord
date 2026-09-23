@@ -244,6 +244,26 @@ export const syncRun = pgTable("sync_run", {
 ]);
 
 
+export const conversationBinding = pgTable("conversation_binding", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  workspaceId: text("workspace_id").notNull(),
+  agentId: uuid("agent_id").notNull(),
+  contextType: text("context_type").notNull(),
+  contextId: uuid("context_id"),
+  openclawSessionKey: text("openclaw_session_key").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  lastUsedAt: timestamp("last_used_at", { withTimezone: true }).notNull().defaultNow()
+}, (t) => [
+  uniqueIndex("conversation_binding_session_unique").on(
+    t.workspaceId,
+    t.openclawSessionKey
+  ),
+  index("conversation_binding_workspace_agent_idx").on(
+    t.workspaceId,
+    t.agentId
+  )
+]);
+
 export const agentRun = pgTable("agent_run", {
   id: uuid("id").primaryKey().defaultRandom(),
   workspaceId: text("workspace_id").notNull(),
