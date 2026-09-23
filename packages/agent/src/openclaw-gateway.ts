@@ -60,6 +60,7 @@ export type OpenClawHistoryInput = {
 type GatewayClientLike = Pick<
   GatewayClient,
   | "start"
+  | "stop"
   | "stopAndWait"
   | "request"
   | "connected"
