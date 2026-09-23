@@ -12,6 +12,7 @@ import {
   it
 } from "vitest";
 import {
+  actionExecution,
   actionIntent,
   agentProfile,
   auditEvent,
@@ -33,6 +34,7 @@ import {
   seedAlsLebenPilotData,
   storeConnectorCredential,
   syncCursor,
+  TransactionalPostgresActionStore,
   withPrincipalTransaction,
   workItem,
   workspaceProfile
@@ -780,6 +782,142 @@ describeDatabase("database tenant isolation", () => {
     ).toBe(
       `PROPERTY:${propertyId.toLowerCase()}`
     );
+  });
+
+
+  it("allows only one side effect for concurrent retries with the same idempotency key", async () => {
+    const actor = principal(
+      workspaceA,
+      "idempotency-race"
+    );
+
+    let sideEffects = 0;
+
+    const definition = {
+      id: "calendar.external.test",
+      input: CompleteWorkItemInputSchema,
+      requiredCapabilities: [
+        "today.manage"
+      ],
+      risk: () => "LOW" as const,
+      idempotency:
+        "REQUIRED" as const,
+      externalEffectRefs: (
+        result: {
+          providerRef: string;
+        }
+      ) => [
+        result.providerRef
+      ],
+      execute: async () => {
+        sideEffects += 1;
+
+        await new Promise(
+          (resolve) =>
+            setTimeout(
+              resolve,
+              40
+            )
+        );
+
+        return {
+          providerRef:
+            "provider:event:1"
+        };
+      }
+    };
+
+    const run = () =>
+      executeAction({
+        definition,
+        principal: actor,
+        rawInput: {
+          workspaceId:
+            workspaceA,
+          workItemId:
+            crypto.randomUUID()
+        },
+        idempotencyKey:
+          `race-${suffix}`,
+        store:
+          new TransactionalPostgresActionStore(
+            pool,
+            actor
+          )
+      });
+
+    const [first, second] =
+      await Promise.all([
+        run(),
+        run()
+      ]);
+
+    expect(sideEffects).toBe(1);
+
+    const statuses = [
+      first.status,
+      second.status
+    ];
+
+    expect(
+      statuses.filter(
+        (status) =>
+          status ===
+          "SUCCEEDED"
+      )
+    ).toHaveLength(1);
+
+    expect(
+      statuses.some(
+        (status) =>
+          status ===
+          "CONFLICT"
+      )
+    ).toBe(true);
+
+    const replay =
+      await run();
+
+    expect(
+      replay.status
+    ).toBe("SUCCEEDED");
+    expect(
+      replay.data
+    ).toEqual({
+      providerRef:
+        "provider:event:1"
+    });
+    expect(sideEffects).toBe(1);
+
+    const executions =
+      await withPrincipalTransaction(
+        pool,
+        actor,
+        ({ db }) =>
+          db
+            .select()
+            .from(
+              actionExecution
+            )
+            .where(
+              eq(
+                actionExecution
+                  .idempotencyKey,
+                `race-${suffix}`
+              )
+            )
+      );
+
+    expect(executions).toHaveLength(1);
+    expect(
+      executions[0]?.state
+    ).toBe("SUCCEEDED");
+    expect(
+      executions[0]
+        ?.externalEffectRefs
+    ).toEqual([
+      "provider:event:1"
+    ]);
   });
 
   it("keeps audit append-only for the application role", async () => {
