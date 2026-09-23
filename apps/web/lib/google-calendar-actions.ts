@@ -12,6 +12,7 @@ import {
 } from "@skrivebord/contracts";
 import {
   getCalendarMoveTarget,
+  persistCalendarWriteResult,
   withPrincipalTransaction
 } from "@skrivebord/database";
 import {
@@ -154,18 +155,75 @@ export function createMoveGoogleCalendarEventAction(): ActionDefinition<
       const connector =
         new GoogleCalendarConnector();
 
-      const providerResult =
-        await connector.updateEvent({
-          accessToken:
-            access.tokens.accessToken,
-          calendarId:
-            target.providerCalendarId,
-          eventId:
-            target.providerEventId,
-          providerVersion:
-            target.providerVersion,
-          event: patch
-        });
+      let providerResult:
+        CalendarSyncEvent;
+
+      try {
+        providerResult =
+          await connector.updateEvent({
+            accessToken:
+              access.tokens.accessToken,
+            calendarId:
+              target.providerCalendarId,
+            eventId:
+              target.providerEventId,
+            providerVersion:
+              target.providerVersion,
+            event: patch
+          });
+      } catch (error) {
+        if (
+          error instanceof
+            ConnectorError &&
+          error.code ===
+            "CONFLICT"
+        ) {
+          try {
+            const current =
+              await connector.getEvent({
+                accessToken:
+                  access.tokens
+                    .accessToken,
+                calendarId:
+                  target
+                    .providerCalendarId,
+                eventId:
+                  target
+                    .providerEventId
+              });
+
+            await withPrincipalTransaction(
+              databasePool,
+              principal,
+              ({ db }) =>
+                persistCalendarWriteResult(
+                  db,
+                  {
+                    workspaceId:
+                      principal
+                        .workspaceId,
+                    localTargetEventId:
+                      target
+                        .localTargetEventId,
+                    providerResult:
+                      current,
+                    now
+                  }
+                )
+            );
+          } catch {
+            // Keep the original concurrency conflict
+            // authoritative if refresh also fails.
+          }
+
+          throw new CalendarMoveError(
+            "CALENDAR_PROVIDER_CONFLICT",
+            "Begivenheden er ændret i Google siden sidste synkronisering. Skrivebord har forsøgt at hente den nyeste version; gennemgå begivenheden og prøv igen."
+          );
+        }
+
+        throw error;
+      }
 
       return {
         localTargetEventId:
