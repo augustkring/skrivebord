@@ -1,5 +1,9 @@
 import type { CalendarSyncResult } from "@skrivebord/connectors";
-import { and, eq } from "drizzle-orm";
+import {
+  and,
+  eq,
+  inArray
+} from "drizzle-orm";
 import type { SkrivebordDatabase } from "./client";
 import {
   calendarEvent,
@@ -18,6 +22,7 @@ export type PersistCalendarSyncInput = {
   mode: "INITIAL" | "INCREMENTAL";
   result: CalendarSyncResult;
   protectCursor: (rawCursor: string) => Promise<string> | string;
+  replaceSeriesMasterIds?: string[];
   now?: Date;
 };
 
@@ -68,6 +73,40 @@ export async function persistCalendarSync(
   let itemsCreated = 0;
   let itemsUpdated = 0;
   let itemsDeleted = 0;
+
+  const replaceSeriesMasterIds =
+    [
+      ...new Set(
+        input
+          .replaceSeriesMasterIds ??
+        []
+      )
+    ];
+
+  if (
+    replaceSeriesMasterIds.length >
+    0
+  ) {
+    await db
+      .delete(calendarEvent)
+      .where(
+        and(
+          eq(
+            calendarEvent.workspaceId,
+            input.workspaceId
+          ),
+          eq(
+            calendarEvent.calendarSourceId,
+            input.calendarSourceId
+          ),
+          inArray(
+            calendarEvent
+              .recurrenceMasterId,
+            replaceSeriesMasterIds
+          )
+        )
+      );
+  }
 
   for (const event of input.result.events) {
     const [existing] = await db
