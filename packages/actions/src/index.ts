@@ -212,8 +212,9 @@ export class InMemoryActionStore implements ActionStore {
 
   async markExecutionRunning(
     executionId: string,
-    _startedAt: string
+    startedAt: string
   ) {
+    void startedAt;
     const execution = this.executions.get(executionId);
     if (!execution) throw new Error("ACTION_EXECUTION_NOT_FOUND");
     execution.state = "RUNNING";
