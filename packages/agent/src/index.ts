@@ -141,6 +141,5 @@ export function listYearPlanForAgent(
   };
 }
 
-export * from "./openclaw-gateway";
 
 export * from "./openclaw";
