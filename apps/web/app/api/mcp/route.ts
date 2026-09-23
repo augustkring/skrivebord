@@ -3,12 +3,14 @@ import type { PrincipalContext } from "@skrivebord/contracts";
 import {
   createCompleteWorkItemAction,
   getActionStatus,
+  getCalendarEvent,
   listCalendarEvents,
   listTodayItems,
   listYearPlanItems,
   loadOperationalSnapshot,
   PostgresActionStore,
   recomputeToday,
+  searchCalendarEvents,
   TransactionalPostgresActionStore,
   withPrincipalTransaction
 } from "@skrivebord/database";
@@ -116,6 +118,41 @@ function mapTodayItem(
     suggestedActionLabel: actionLabel(
       item.suggestedActionId
     )
+  };
+}
+
+function mapCalendarEvent(
+  event: Awaited<
+    ReturnType<
+      typeof listCalendarEvents
+    >
+  >[number]
+) {
+  return {
+    id: event.id,
+    title: event.title,
+    category: event.category,
+    startAt:
+      event.startAt
+        ?.toISOString() ??
+      null,
+    endAt:
+      event.endAt
+        ?.toISOString() ??
+      null,
+    startDate:
+      event.startDate ?? null,
+    endDate:
+      event.endDate ?? null,
+    allDay: event.allDay,
+    timezone:
+      event.timezone ?? null,
+    status: event.status,
+    provider: event.provider,
+    sourceName:
+      event.sourceName,
+    syncState:
+      event.syncState
   };
 }
 
@@ -386,6 +423,154 @@ function buildHandler(principal: PrincipalContext) {
 
       if (has(principal, "calendar.read")) {
         server.registerTool(
+          "calendar.search_events",
+          {
+            title: "Søg kalenderbegivenheder",
+            description:
+              "Søger normaliserede kalenderbegivenheder i agentens eget workspace efter titel.",
+            inputSchema: z.object({
+              query:
+                z.string()
+                  .trim()
+                  .min(1)
+                  .max(200),
+              limit:
+                z.number()
+                  .int()
+                  .min(1)
+                  .max(100)
+                  .optional()
+            }),
+            outputSchema: z.object({
+              humanSummary:
+                z.string(),
+              events:
+                z.array(
+                  calendarEventSchema
+                )
+            }),
+            annotations: {
+              readOnlyHint: true
+            }
+          },
+          async ({
+            query,
+            limit
+          }) => {
+            const rows =
+              await withPrincipalTransaction(
+                databasePool,
+                principal,
+                ({ db }) =>
+                  searchCalendarEvents(
+                    db,
+                    {
+                      workspaceId:
+                        principal.workspaceId,
+                      query,
+                      limit
+                    }
+                  )
+              );
+
+            const events =
+              rows.map(
+                mapCalendarEvent
+              );
+
+            const output = {
+              humanSummary:
+                `${events.length} kalenderbegivenheder matchede søgningen.`,
+              events
+            };
+
+            return {
+              content: [
+                {
+                  type: "text",
+                  text:
+                    output.humanSummary
+                }
+              ],
+              structuredContent:
+                output
+            };
+          }
+        );
+
+        server.registerTool(
+          "calendar.get_event",
+          {
+            title: "Hent kalenderbegivenhed",
+            description:
+              "Henter én normaliseret kalenderbegivenhed i agentens eget workspace ud fra Skrivebord event-ID.",
+            inputSchema: z.object({
+              eventId:
+                z.string().uuid()
+            }),
+            outputSchema: z.object({
+              humanSummary:
+                z.string(),
+              event:
+                calendarEventSchema
+            }),
+            annotations: {
+              readOnlyHint: true
+            }
+          },
+          async ({ eventId }) => {
+            const event =
+              await withPrincipalTransaction(
+                databasePool,
+                principal,
+                ({ db }) =>
+                  getCalendarEvent(
+                    db,
+                    {
+                      workspaceId:
+                        principal.workspaceId,
+                      eventId
+                    }
+                  )
+              );
+
+            if (!event) {
+              return {
+                isError: true,
+                content: [
+                  {
+                    type: "text",
+                    text:
+                      "Kalenderbegivenheden blev ikke fundet."
+                  }
+                ]
+              };
+            }
+
+            const output = {
+              humanSummary:
+                `${event.title} blev hentet.`,
+              event:
+                mapCalendarEvent(
+                  event
+                )
+            };
+
+            return {
+              content: [
+                {
+                  type: "text",
+                  text:
+                    output.humanSummary
+                }
+              ],
+              structuredContent:
+                output
+            };
+          }
+        );
+
+        server.registerTool(
           "calendar.list",
           {
             title: "List kalender",
@@ -412,28 +597,10 @@ function buildHandler(principal: PrincipalContext) {
                   )
               );
 
-            const events = rows.map((event) => ({
-              id: event.id,
-              title: event.title,
-              category: event.category,
-              startAt:
-                event.startAt?.toISOString() ??
-                null,
-              endAt:
-                event.endAt?.toISOString() ??
-                null,
-              startDate:
-                event.startDate ?? null,
-              endDate:
-                event.endDate ?? null,
-              allDay: event.allDay,
-              timezone:
-                event.timezone ?? null,
-              status: event.status,
-              provider: event.provider,
-              sourceName: event.sourceName,
-              syncState: event.syncState
-            }));
+            const events =
+              rows.map(
+                mapCalendarEvent
+              );
 
             const output = {
               humanSummary:
