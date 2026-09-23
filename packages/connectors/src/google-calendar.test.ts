@@ -158,6 +158,14 @@ describe("GoogleCalendarConnector", () => {
               timeZone:
                 "Europe/Copenhagen"
             },
+            recurringEventId:
+              "series-master",
+            originalStartTime: {
+              dateTime:
+                "2026-09-26T11:00:00+02:00",
+              timeZone:
+                "Europe/Copenhagen"
+            },
             updated:
               "2026-09-23T12:00:00Z"
           })
@@ -183,6 +191,10 @@ describe("GoogleCalendarConnector", () => {
         "etag-current",
       title:
         "Opdateret i Google",
+      recurrenceMasterId:
+        "series-master",
+      recurrenceOriginalStartAt:
+        "2026-09-26T11:00:00+02:00",
       status: "CONFIRMED"
     });
 
