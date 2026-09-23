@@ -72,6 +72,16 @@ export type OpenClawGatewayConfig = {
   connectTimeoutMs?: number;
 };
 
+export type OpenClawGatewayEvent = {
+  event: string;
+  payload?: unknown;
+  seq?: number;
+};
+
+export type OpenClawGatewayListener = (
+  event: OpenClawGatewayEvent
+) => void;
+
 type GatewayHello = {
   protocol?: number;
   protocolVersion?: number;
@@ -221,6 +231,8 @@ export class OpenClawGatewayAdapter {
   private connectReject:
     | ((error: Error) => void)
     | undefined;
+  private readonly listeners =
+    new Set<OpenClawGatewayListener>();
 
   constructor(
     private readonly config:
@@ -268,6 +280,17 @@ export class OpenClawGatewayAdapter {
         this.config
           .requestTimeoutMs ??
         30_000,
+      onEvent: (event) => {
+        const normalized: OpenClawGatewayEvent = {
+          event: event.event,
+          payload: event.payload,
+          seq: event.seq
+        };
+
+        for (const listener of this.listeners) {
+          listener(normalized);
+        }
+      },
       onHelloOk: (hello) => {
         this.ready = true;
         this.hello =
@@ -292,6 +315,16 @@ export class OpenClawGatewayAdapter {
         this.ready = false;
       }
     });
+  }
+
+  subscribe(
+    listener: OpenClawGatewayListener
+  ): () => void {
+    this.listeners.add(listener);
+
+    return () => {
+      this.listeners.delete(listener);
+    };
   }
 
   private clearConnectDeferred() {
