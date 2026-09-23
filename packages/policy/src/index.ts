@@ -42,6 +42,7 @@ export const MOJN_V1_CAPABILITIES = [
   "today.read",
   "today.manage",
   "calendar.read",
+  "calendar.update",
   "booking.read",
   "yearplan.read",
   "activity.read",
