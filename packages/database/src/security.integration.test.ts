@@ -23,10 +23,12 @@ import {
   connectorCredential,
   createCompleteWorkItemAction,
   getBoundAgentCredential,
+  getCalendarMoveTarget,
   getOrCreateConversationBinding,
   createDatabasePool,
   listTodayItems,
   persistCalendarSync,
+  persistCalendarWriteResult,
   PostgresActionStore,
   recomputeToday,
   readConnectorCredential,
@@ -376,6 +378,271 @@ describeDatabase("database tenant isolation", () => {
     );
   });
 
+
+
+  it("resolves and persists calendar write targets inside the active tenant only", async () => {
+    const actor = principal(
+      workspaceA,
+      "calendar-write-target",
+      "SYSTEM"
+    );
+
+    const created =
+      await withPrincipalTransaction(
+        pool,
+        actor,
+        async ({ db }) => {
+          const [account] =
+            await db
+              .insert(
+                connectorAccount
+              )
+              .values({
+                workspaceId:
+                  workspaceA,
+                provider: "GOOGLE",
+                displayName:
+                  "Writable Google Calendar",
+                providerAccountId:
+                  `google-write-${suffix}`,
+                status:
+                  "CONNECTED",
+                scopes: [
+                  "calendar.events"
+                ],
+                connectedBy:
+                  actor.principalId
+              })
+              .returning({
+                id:
+                  connectorAccount.id
+              });
+
+          if (!account) {
+            throw new Error(
+              "CONNECTOR_ACCOUNT_CREATE_FAILED"
+            );
+          }
+
+          const [source] =
+            await db
+              .insert(
+                calendarSource
+              )
+              .values({
+                workspaceId:
+                  workspaceA,
+                provider: "GOOGLE",
+                connectorAccountId:
+                  account.id,
+                providerCalendarId:
+                  `write-${suffix}`,
+                displayName:
+                  "Writable calendar",
+                writable: true,
+                syncState:
+                  "CONNECTED"
+              })
+              .returning({
+                id:
+                  calendarSource.id
+              });
+
+          if (!source) {
+            throw new Error(
+              "CALENDAR_SOURCE_CREATE_FAILED"
+            );
+          }
+
+          const [event] =
+            await db
+              .insert(
+                calendarEvent
+              )
+              .values({
+                workspaceId:
+                  workspaceA,
+                calendarSourceId:
+                  source.id,
+                providerEventId:
+                  `provider-write-${suffix}`,
+                providerVersion:
+                  "etag-before",
+                title:
+                  "Flytbar rengøring",
+                startAt:
+                  new Date(
+                    "2026-09-25T08:00:00Z"
+                  ),
+                endAt:
+                  new Date(
+                    "2026-09-25T09:00:00Z"
+                  ),
+                allDay: false,
+                timezone:
+                  "Europe/Copenhagen",
+                status:
+                  "CONFIRMED",
+                category:
+                  "EXTERNAL",
+                originActorType:
+                  "SYSTEM",
+                originActorId:
+                  actor.principalId
+              })
+              .returning({
+                id:
+                  calendarEvent.id
+              });
+
+          if (!event) {
+            throw new Error(
+              "CALENDAR_EVENT_CREATE_FAILED"
+            );
+          }
+
+          return {
+            accountId:
+              account.id,
+            sourceId:
+              source.id,
+            eventId:
+              event.id
+          };
+        }
+      );
+
+    const target =
+      await withPrincipalTransaction(
+        pool,
+        actor,
+        ({ db }) =>
+          getCalendarMoveTarget(
+            db,
+            {
+              workspaceId:
+                workspaceA,
+              eventId:
+                created.eventId,
+              scope:
+                "OCCURRENCE"
+            }
+          )
+      );
+
+    expect(target).toMatchObject({
+      localTargetEventId:
+        created.eventId,
+      calendarSourceId:
+        created.sourceId,
+      connectorAccountId:
+        created.accountId,
+      provider:
+        "GOOGLE",
+      providerVersion:
+        "etag-before",
+      writable: true,
+      syncState:
+        "CONNECTED"
+    });
+
+    const crossTenant =
+      await withPrincipalTransaction(
+        pool,
+        principal(
+          workspaceB,
+          "calendar-write-cross-tenant",
+          "SYSTEM"
+        ),
+        ({ db }) =>
+          getCalendarMoveTarget(
+            db,
+            {
+              workspaceId:
+                workspaceB,
+              eventId:
+                created.eventId,
+              scope:
+                "OCCURRENCE"
+            }
+          )
+      );
+
+    expect(
+      crossTenant
+    ).toBeUndefined();
+
+    await withPrincipalTransaction(
+      pool,
+      actor,
+      ({ db }) =>
+        persistCalendarWriteResult(
+          db,
+          {
+            workspaceId:
+              workspaceA,
+            localTargetEventId:
+              created.eventId,
+            providerResult: {
+              providerEventId:
+                `provider-write-${suffix}`,
+              providerVersion:
+                "etag-after",
+              title:
+                "Flytbar rengøring",
+              startAt:
+                "2026-09-25T10:00:00Z",
+              endAt:
+                "2026-09-25T11:00:00Z",
+              allDay: false,
+              timezone:
+                "Europe/Copenhagen",
+              status:
+                "CONFIRMED"
+            },
+            now:
+              new Date(
+                "2026-09-23T12:00:00Z"
+              )
+          }
+        )
+    );
+
+    const [stored] =
+      await withPrincipalTransaction(
+        pool,
+        actor,
+        ({ db }) =>
+          db
+            .select()
+            .from(
+              calendarEvent
+            )
+            .where(
+              eq(
+                calendarEvent.id,
+                created.eventId
+              )
+            )
+      );
+
+    expect(
+      stored?.providerVersion
+    ).toBe("etag-after");
+    expect(
+      stored?.startAt?.toISOString()
+    ).toBe(
+      "2026-09-25T10:00:00.000Z"
+    );
+    expect(
+      stored?.endAt?.toISOString()
+    ).toBe(
+      "2026-09-25T11:00:00.000Z"
+    );
+    expect(
+      stored?.localVersion
+    ).toBe(2);
+  });
 
   it("keeps connector credential payloads invisible to HUMAN and AGENT principals", async () => {
     const system = principal(
