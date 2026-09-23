@@ -14,8 +14,28 @@ import {
   calendarEvent,
   calendarSource,
   workItem,
+  workspaceProfile,
   yearPlanItem
 } from "./schema";
+
+export async function getWorkspaceProfile(
+  db: SkrivebordDatabase,
+  workspaceId: string
+) {
+  const [workspace] =
+    await db
+      .select()
+      .from(workspaceProfile)
+      .where(
+        eq(
+          workspaceProfile.workspaceId,
+          workspaceId
+        )
+      )
+      .limit(1);
+
+  return workspace;
+}
 
 export async function listYearPlanItems(
   db: SkrivebordDatabase,
