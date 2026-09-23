@@ -38,10 +38,12 @@ export type OperationalCalendarEvent = {
 export function OperationalCalendar({
   workspaceSlug,
   workspaceTimezone,
+  canUpdateCalendar,
   events
 }: {
   workspaceSlug: string;
   workspaceTimezone: string;
+  canUpdateCalendar: boolean;
   events: OperationalCalendarEvent[];
 }) {
   const [selectedId, setSelectedId] =
@@ -163,7 +165,8 @@ export function OperationalCalendar({
             </p>
 
             <div className="mt-4">
-              {selected.provider ===
+              {canUpdateCalendar &&
+              selected.provider ===
                 "GOOGLE" &&
               selected.writable &&
               selected.syncState ===
