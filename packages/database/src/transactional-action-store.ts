@@ -1,4 +1,6 @@
 import type {
+  ActionExecutionClaim,
+  ActionExecutionRecord,
   ActionIntentRecord,
   ActionIntentState,
   ActionStore,
@@ -44,6 +46,47 @@ export class TransactionalPostgresActionStore
   ): Promise<void> {
     return this.run((store) =>
       store.updateIntentState(intentId, state)
+    );
+  }
+
+  claimExecution(
+    execution: ActionExecutionRecord
+  ): Promise<ActionExecutionClaim> {
+    return this.run((store) =>
+      store.claimExecution(execution)
+    );
+  }
+
+  markExecutionRunning(
+    executionId: string,
+    startedAt: string
+  ): Promise<void> {
+    return this.run((store) =>
+      store.markExecutionRunning(
+        executionId,
+        startedAt
+      )
+    );
+  }
+
+  completeExecution(input: {
+    executionId: string;
+    result: unknown;
+    externalEffectRefs: string[];
+    completedAt: string;
+  }): Promise<void> {
+    return this.run((store) =>
+      store.completeExecution(input)
+    );
+  }
+
+  failExecution(input: {
+    executionId: string;
+    errorCode?: string;
+    failedAt: string;
+  }): Promise<void> {
+    return this.run((store) =>
+      store.failExecution(input)
     );
   }
 
