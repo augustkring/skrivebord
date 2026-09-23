@@ -48,8 +48,13 @@ export type ActionDefinition<Input, Result> = {
 export type ActionIntentState =
   | "PENDING"
   | "WAITING_APPROVAL"
+  | "QUEUED"
+  | "RUNNING"
   | "SUCCEEDED"
-  | "FAILED";
+  | "PARTIAL"
+  | "FAILED"
+  | "CANCELLED"
+  | "ROLLED_BACK";
 
 export type ActionIntentRecord = {
   id: string;
@@ -107,6 +112,48 @@ export type ActionExecutionClaim =
       executionId: string;
     };
 
+export type ActionExecutionState =
+  | "PENDING"
+  | "RUNNING"
+  | "SUCCEEDED"
+  | "FAILED";
+
+export type ActionExecutionRecord = {
+  id: string;
+  workspaceId: string;
+  actionIntentId: string;
+  idempotencyKey: string;
+  parametersDigest: string;
+  state: ActionExecutionState;
+  createdAt: string;
+};
+
+export type ActionExecutionClaim =
+  | {
+      type: "CLAIMED";
+      executionId: string;
+    }
+  | {
+      type: "REPLAY";
+      executionId: string;
+      result: unknown;
+      externalEffectRefs: string[];
+    }
+  | {
+      type: "KEY_REUSED";
+      executionId: string;
+    }
+  | {
+      type: "IN_PROGRESS";
+      executionId: string;
+    }
+  | {
+      type: "FAILED";
+      executionId: string;
+      errorCode?: string;
+      retryable: false;
+    };
+
 export type AuditWrite = {
   workspaceId: string;
   actorId: string;
@@ -118,6 +165,7 @@ export type AuditWrite = {
   source: PrincipalContext["source"];
   outcome: string;
   occurredAt: string;
+  metadata?: Record<string, unknown>;
 };
 
 export interface ActionStore extends ApprovalStore {
