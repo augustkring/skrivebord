@@ -438,6 +438,7 @@ export async function executeAction<Input, Result>(args: {
   explicitlyDelegated?: boolean;
   idempotencyKey?: string;
   approvalId?: string;
+  approvalGranted?: boolean;
 }): Promise<ToolResult<Result>> {
   const parsed = args.definition.input.safeParse(args.rawInput);
   if (!parsed.success) {
@@ -476,7 +477,9 @@ export async function executeAction<Input, Result>(args: {
   }
 
   const risk = args.definition.risk(ctx);
-  const decision = evaluateActionPolicy({
+  const decision = args.approvalGranted
+    ? { type: "AUTO" as const }
+    : evaluateActionPolicy({
     principal: args.principal,
     requiredCapabilities: args.definition.requiredCapabilities,
     risk,
