@@ -15,16 +15,19 @@ import {
   actionIntent,
   auditEvent,
   calendarEvent,
+  bindAgentCredential,
   calendarSource,
   connectorAccount,
   connectorCredential,
   createCompleteWorkItemAction,
+  getBoundAgentCredential,
   createDatabasePool,
   listTodayItems,
   persistCalendarSync,
   PostgresActionStore,
   recomputeToday,
   readConnectorCredential,
+  revokeAgentCredential,
   seedAlsLebenPilotData,
   storeConnectorCredential,
   syncCursor,
@@ -434,6 +437,125 @@ describeDatabase("database tenant isolation", () => {
 
       expect(rows).toEqual([]);
     }
+  });
+
+
+  it("enforces one active agent credential and supports atomic rotation", async () => {
+    const system = principal(
+      workspaceA,
+      "agent-credential-lifecycle",
+      "SYSTEM"
+    );
+
+    await withPrincipalTransaction(
+      pool,
+      system,
+      async ({ db }) => {
+        const first = await bindAgentCredential(
+          db,
+          {
+            workspaceId: workspaceA,
+            name: "Mojn",
+            runtimeAgentKey:
+              `mojn-${suffix}`,
+            apiKeyId:
+              `key-old-${suffix}`,
+            capabilities: [
+              "today.read",
+              "today.manage"
+            ]
+          }
+        );
+
+        await expect(
+          bindAgentCredential(
+            db,
+            {
+              workspaceId: workspaceA,
+              name: "Mojn",
+              runtimeAgentKey:
+                `mojn-${suffix}`,
+              apiKeyId:
+                `key-conflict-${suffix}`,
+              capabilities: [
+                "today.read"
+              ]
+            }
+          )
+        ).rejects.toThrow();
+
+        const stillActive =
+          await getBoundAgentCredential(
+            db,
+            {
+              workspaceId:
+                workspaceA,
+              apiKeyId:
+                first.apiKeyId
+            }
+          );
+
+        expect(
+          stillActive?.apiKeyId
+        ).toBe(first.apiKeyId);
+
+        await revokeAgentCredential(
+          db,
+          {
+            workspaceId: workspaceA,
+            apiKeyId:
+              first.apiKeyId
+          }
+        );
+
+        const second =
+          await bindAgentCredential(
+            db,
+            {
+              workspaceId:
+                workspaceA,
+              name: "Mojn",
+              runtimeAgentKey:
+                `mojn-${suffix}`,
+              apiKeyId:
+                `key-new-${suffix}`,
+              capabilities: [
+                "today.read",
+                "today.manage"
+              ]
+            }
+          );
+
+        const oldAfterRotation =
+          await getBoundAgentCredential(
+            db,
+            {
+              workspaceId:
+                workspaceA,
+              apiKeyId:
+                first.apiKeyId
+            }
+          );
+
+        const newAfterRotation =
+          await getBoundAgentCredential(
+            db,
+            {
+              workspaceId:
+                workspaceA,
+              apiKeyId:
+                second.apiKeyId
+            }
+          );
+
+        expect(
+          oldAfterRotation
+        ).toBeUndefined();
+        expect(
+          newAfterRotation?.apiKeyId
+        ).toBe(second.apiKeyId);
+      }
+    );
   });
 
   it("keeps audit append-only for the application role", async () => {
