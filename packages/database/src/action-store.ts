@@ -1,6 +1,7 @@
 import type {
   ActionExecutionClaim,
   ActionExecutionRecord,
+  ActionIntentClaim,
   ActionIntentRecord,
   ActionIntentState,
   ActionStore,
@@ -35,6 +36,8 @@ export class PostgresActionStore implements ActionStore {
       id: intent.id,
       workspaceId: intent.workspaceId,
       actionId: intent.actionId,
+      idempotencyKey:
+        intent.idempotencyKey,
       requestedByPrincipalId: intent.requestedByPrincipalId,
       requestedByPrincipalType: intent.requestedByPrincipalType,
       parameters: intent.parameters,
@@ -45,6 +48,113 @@ export class PostgresActionStore implements ActionStore {
       state: intent.state,
       createdAt: new Date(intent.createdAt)
     });
+  }
+
+  async claimIntent(
+    intent: ActionIntentRecord
+  ): Promise<ActionIntentClaim> {
+    if (!intent.idempotencyKey) {
+      await this.createIntent(intent);
+      return {
+        type: "CLAIMED",
+        intentId: intent.id
+      };
+    }
+
+    const [inserted] = await this.db
+      .insert(actionIntent)
+      .values({
+        id: intent.id,
+        workspaceId:
+          intent.workspaceId,
+        actionId:
+          intent.actionId,
+        idempotencyKey:
+          intent.idempotencyKey,
+        requestedByPrincipalId:
+          intent.requestedByPrincipalId,
+        requestedByPrincipalType:
+          intent.requestedByPrincipalType,
+        parameters:
+          intent.parameters,
+        parametersDigest:
+          intent.parametersDigest,
+        humanSummary:
+          intent.humanSummary,
+        riskLevel:
+          intent.riskLevel,
+        policyDecision:
+          intent.policyDecision,
+        state:
+          intent.state,
+        createdAt:
+          new Date(intent.createdAt)
+      })
+      .onConflictDoNothing({
+        target: [
+          actionIntent.workspaceId,
+          actionIntent.idempotencyKey
+        ]
+      })
+      .returning({
+        id: actionIntent.id
+      });
+
+    if (inserted) {
+      return {
+        type: "CLAIMED",
+        intentId: inserted.id
+      };
+    }
+
+    const [existing] =
+      await this.db
+        .select({
+          id: actionIntent.id,
+          state:
+            actionIntent.state,
+          parametersDigest:
+            actionIntent.parametersDigest
+        })
+        .from(actionIntent)
+        .where(
+          and(
+            eq(
+              actionIntent.workspaceId,
+              intent.workspaceId
+            ),
+            eq(
+              actionIntent.idempotencyKey,
+              intent.idempotencyKey
+            )
+          )
+        )
+        .limit(1);
+
+    if (!existing) {
+      throw new Error(
+        "ACTION_INTENT_CLAIM_LOST"
+      );
+    }
+
+    if (
+      existing.parametersDigest !==
+      intent.parametersDigest
+    ) {
+      return {
+        type: "KEY_REUSED",
+        intentId: existing.id
+      };
+    }
+
+    return {
+      type: "EXISTING",
+      intentId: existing.id,
+      state:
+        existing.state as ActionIntentState,
+      parametersDigest:
+        existing.parametersDigest
+    };
   }
 
   async updateIntentState(
