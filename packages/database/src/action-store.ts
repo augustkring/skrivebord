@@ -1,4 +1,6 @@
 import type {
+  ActionExecutionClaim,
+  ActionExecutionRecord,
   ActionIntentRecord,
   ActionIntentState,
   ActionStore,
@@ -8,6 +10,7 @@ import type {
 import { and, eq } from "drizzle-orm";
 import type { SkrivebordDatabase } from "./client";
 import {
+  actionExecution,
   actionIntent,
   approvalRequest,
   auditEvent
@@ -61,6 +64,223 @@ export class PostgresActionStore implements ActionStore {
 
     if (rows.length !== 1) {
       throw new Error("ACTION_INTENT_NOT_FOUND");
+    }
+  }
+
+  async claimExecution(
+    execution: ActionExecutionRecord
+  ): Promise<ActionExecutionClaim> {
+    const [inserted] = await this.db
+      .insert(actionExecution)
+      .values({
+        id: execution.id,
+        workspaceId: execution.workspaceId,
+        actionIntentId: execution.actionIntentId,
+        idempotencyKey: execution.idempotencyKey,
+        parametersDigest: execution.parametersDigest,
+        state: execution.state,
+        createdAt: new Date(execution.createdAt)
+      })
+      .onConflictDoNothing({
+        target: [
+          actionExecution.workspaceId,
+          actionExecution.idempotencyKey
+        ]
+      })
+      .returning({
+        id: actionExecution.id
+      });
+
+    if (inserted) {
+      return {
+        type: "CLAIMED",
+        executionId: inserted.id
+      };
+    }
+
+    const [existing] = await this.db
+      .select()
+      .from(actionExecution)
+      .where(
+        and(
+          eq(
+            actionExecution.workspaceId,
+            execution.workspaceId
+          ),
+          eq(
+            actionExecution.idempotencyKey,
+            execution.idempotencyKey
+          )
+        )
+      )
+      .limit(1);
+
+    if (!existing) {
+      throw new Error(
+        "ACTION_EXECUTION_CLAIM_LOST"
+      );
+    }
+
+    if (
+      existing.parametersDigest !==
+      execution.parametersDigest
+    ) {
+      return {
+        type: "KEY_REUSED",
+        executionId: existing.id
+      };
+    }
+
+    if (existing.state === "SUCCEEDED") {
+      return {
+        type: "REPLAY",
+        executionId: existing.id,
+        result: existing.result,
+        externalEffectRefs:
+          Array.isArray(
+            existing.externalEffectRefs
+          )
+            ? existing.externalEffectRefs.filter(
+                (
+                  value
+                ): value is string =>
+                  typeof value === "string"
+              )
+            : []
+      };
+    }
+
+    if (existing.state === "FAILED") {
+      return {
+        type: "FAILED",
+        executionId: existing.id,
+        errorCode:
+          existing.errorCode ??
+          undefined
+      };
+    }
+
+    return {
+      type: "IN_PROGRESS",
+      executionId: existing.id
+    };
+  }
+
+  async markExecutionRunning(
+    executionId: string,
+    startedAt: string
+  ): Promise<void> {
+    const rows = await this.db
+      .update(actionExecution)
+      .set({
+        state: "RUNNING",
+        startedAt: new Date(startedAt),
+        updatedAt: new Date(startedAt)
+      })
+      .where(
+        and(
+          eq(
+            actionExecution.id,
+            executionId
+          ),
+          eq(
+            actionExecution.workspaceId,
+            this.workspaceId
+          )
+        )
+      )
+      .returning({
+        id: actionExecution.id
+      });
+
+    if (rows.length !== 1) {
+      throw new Error(
+        "ACTION_EXECUTION_NOT_FOUND"
+      );
+    }
+  }
+
+  async completeExecution(input: {
+    executionId: string;
+    result: unknown;
+    externalEffectRefs: string[];
+    completedAt: string;
+  }): Promise<void> {
+    const completedAt =
+      new Date(input.completedAt);
+
+    const rows = await this.db
+      .update(actionExecution)
+      .set({
+        state: "SUCCEEDED",
+        result: input.result,
+        externalEffectRefs:
+          input.externalEffectRefs,
+        completedAt,
+        updatedAt: completedAt,
+        errorCode: null
+      })
+      .where(
+        and(
+          eq(
+            actionExecution.id,
+            input.executionId
+          ),
+          eq(
+            actionExecution.workspaceId,
+            this.workspaceId
+          )
+        )
+      )
+      .returning({
+        id: actionExecution.id
+      });
+
+    if (rows.length !== 1) {
+      throw new Error(
+        "ACTION_EXECUTION_NOT_FOUND"
+      );
+    }
+  }
+
+  async failExecution(input: {
+    executionId: string;
+    errorCode?: string;
+    failedAt: string;
+  }): Promise<void> {
+    const failedAt =
+      new Date(input.failedAt);
+
+    const rows = await this.db
+      .update(actionExecution)
+      .set({
+        state: "FAILED",
+        errorCode:
+          input.errorCode ?? null,
+        lastErrorAt: failedAt,
+        completedAt: failedAt,
+        updatedAt: failedAt
+      })
+      .where(
+        and(
+          eq(
+            actionExecution.id,
+            input.executionId
+          ),
+          eq(
+            actionExecution.workspaceId,
+            this.workspaceId
+          )
+        )
+      )
+      .returning({
+        id: actionExecution.id
+      });
+
+    if (rows.length !== 1) {
+      throw new Error(
+        "ACTION_EXECUTION_NOT_FOUND"
+      );
     }
   }
 
