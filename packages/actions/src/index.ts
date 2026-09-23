@@ -193,6 +193,9 @@ export class InMemoryActionStore implements ActionStore {
     result?: unknown;
     externalEffectRefs?: string[];
     errorCode?: string;
+    failureSummary?: string;
+    retryable?: boolean;
+    attemptCount: number;
   }>();
   approvals = new Map<string, ApprovalRecord>();
   audit: AuditWrite[] = [];
@@ -217,7 +220,10 @@ export class InMemoryActionStore implements ActionStore {
     );
 
     if (!existing) {
-      this.executions.set(execution.id, execution);
+      this.executions.set(execution.id, {
+        ...execution,
+        attemptCount: 1
+      });
       return {
         type: "CLAIMED",
         executionId: execution.id
@@ -245,10 +251,24 @@ export class InMemoryActionStore implements ActionStore {
     }
 
     if (existing.state === "FAILED") {
+      if (existing.retryable) {
+        existing.state = "PENDING";
+        existing.attemptCount += 1;
+        existing.errorCode = undefined;
+        existing.failureSummary = undefined;
+        existing.retryable = false;
+
+        return {
+          type: "CLAIMED",
+          executionId: existing.id
+        };
+      }
+
       return {
         type: "FAILED",
         executionId: existing.id,
-        errorCode: existing.errorCode
+        errorCode: existing.errorCode,
+        retryable: false
       };
     }
 
@@ -284,12 +304,17 @@ export class InMemoryActionStore implements ActionStore {
   async failExecution(input: {
     executionId: string;
     errorCode?: string;
+    failureSummary?: string;
+    retryable: boolean;
     failedAt: string;
   }) {
+    void input.failedAt;
     const execution = this.executions.get(input.executionId);
     if (!execution) throw new Error("ACTION_EXECUTION_NOT_FOUND");
     execution.state = "FAILED";
     execution.errorCode = input.errorCode;
+    execution.failureSummary = input.failureSummary;
+    execution.retryable = input.retryable;
   }
 
   async createApproval(approval: ApprovalRecord) {
