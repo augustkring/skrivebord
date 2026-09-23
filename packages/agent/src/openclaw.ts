@@ -555,3 +555,137 @@ export class OpenClawGatewayAdapter {
     );
   }
 }
+
+
+export type OpenClawDisplayMessage = {
+  id?: string;
+  role: "user" | "assistant" | "system" | "tool";
+  text: string;
+  timestamp?: string;
+};
+
+function textFromContent(
+  value: unknown
+): string {
+  if (typeof value === "string") {
+    return value.trim();
+  }
+
+  if (!Array.isArray(value)) {
+    return "";
+  }
+
+  return value
+    .map((block) => {
+      const record = asRecord(block);
+      if (!record) return "";
+
+      const type =
+        readString(record, "type");
+      if (
+        type !== "text" &&
+        type !== "output_text" &&
+        type !== "input_text"
+      ) {
+        return "";
+      }
+
+      return (
+        readString(record, "text") ??
+        readString(record, "content") ??
+        ""
+      );
+    })
+    .filter(Boolean)
+    .join("\n")
+    .trim();
+}
+
+export function normalizeOpenClawHistory(
+  history: OpenClawHistoryResult
+): OpenClawDisplayMessage[] {
+  if (!Array.isArray(history.messages)) {
+    return [];
+  }
+
+  const result:
+    OpenClawDisplayMessage[] = [];
+
+  for (
+    const raw of history.messages
+  ) {
+    const record = asRecord(raw);
+    if (!record) continue;
+
+    const role =
+      readString(record, "role");
+
+    if (
+      role !== "user" &&
+      role !== "assistant" &&
+      role !== "system" &&
+      role !== "tool"
+    ) {
+      continue;
+    }
+
+    const text =
+      textFromContent(
+        record.content ??
+          record.message ??
+          record.text
+      );
+
+    if (!text) continue;
+
+    result.push({
+      id:
+        readString(record, "id") ??
+        readString(
+          record,
+          "messageId"
+        ),
+      role,
+      text,
+      timestamp:
+        readString(
+          record,
+          "timestamp"
+        ) ??
+        readString(
+          record,
+          "createdAt"
+        )
+    });
+  }
+
+  return result;
+}
+
+export function latestAssistantText(
+  history: OpenClawHistoryResult
+): string | undefined {
+  const messages =
+    normalizeOpenClawHistory(
+      history
+    );
+
+  for (
+    let index =
+      messages.length - 1;
+    index >= 0;
+    index -= 1
+  ) {
+    const message =
+      messages[index];
+
+    if (
+      message?.role ===
+      "assistant"
+    ) {
+      return message.text;
+    }
+  }
+
+  return undefined;
+}
