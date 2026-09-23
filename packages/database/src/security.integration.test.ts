@@ -13,6 +13,7 @@ import {
 } from "vitest";
 import {
   actionIntent,
+  agentProfile,
   auditEvent,
   calendarEvent,
   bindAgentCredential,
@@ -616,6 +617,168 @@ describeDatabase("database tenant isolation", () => {
     expect(
       newAfterRotation?.apiKeyId
     ).toBe(second.apiKeyId);
+  });
+
+
+  it("isolates OpenClaw sessions by workspace, agent and business context", async () => {
+    const runtimeAgentKey =
+      `mojn-session-${suffix}`;
+    const bookingId =
+      crypto.randomUUID();
+    const propertyId =
+      crypto.randomUUID();
+
+    for (const workspaceId of [
+      workspaceA,
+      workspaceB
+    ]) {
+      await withPrincipalTransaction(
+        pool,
+        principal(
+          workspaceId,
+          `session-agent-${workspaceId}`,
+          "SYSTEM"
+        ),
+        ({ db }) =>
+          db
+            .insert(agentProfile)
+            .values({
+              workspaceId,
+              name: "Mojn",
+              runtimeType:
+                "OPENCLAW",
+              runtimeAgentKey,
+              enabled: true,
+              status: "READY"
+            })
+      );
+    }
+
+    const bindingsA =
+      await withPrincipalTransaction(
+        pool,
+        principal(
+          workspaceA,
+          "conversation-a",
+          "SYSTEM"
+        ),
+        async ({ db }) => {
+          const generalOne =
+            await getOrCreateConversationBinding(
+              db,
+              {
+                workspaceId:
+                  workspaceA,
+                runtimeAgentKey,
+                context: {
+                  type: "GENERAL"
+                }
+              }
+            );
+
+          const generalTwo =
+            await getOrCreateConversationBinding(
+              db,
+              {
+                workspaceId:
+                  workspaceA,
+                runtimeAgentKey,
+                context: {
+                  type: "GENERAL"
+                }
+              }
+            );
+
+          const booking =
+            await getOrCreateConversationBinding(
+              db,
+              {
+                workspaceId:
+                  workspaceA,
+                runtimeAgentKey,
+                context: {
+                  type: "BOOKING",
+                  id: bookingId
+                }
+              }
+            );
+
+          const property =
+            await getOrCreateConversationBinding(
+              db,
+              {
+                workspaceId:
+                  workspaceA,
+                runtimeAgentKey,
+                context: {
+                  type: "PROPERTY",
+                  id: propertyId
+                }
+              }
+            );
+
+          return {
+            generalOne,
+            generalTwo,
+            booking,
+            property
+          };
+        }
+      );
+
+    const generalB =
+      await withPrincipalTransaction(
+        pool,
+        principal(
+          workspaceB,
+          "conversation-b",
+          "SYSTEM"
+        ),
+        ({ db }) =>
+          getOrCreateConversationBinding(
+            db,
+            {
+              workspaceId:
+                workspaceB,
+              runtimeAgentKey,
+              context: {
+                type: "GENERAL"
+              }
+            }
+          )
+      );
+
+    expect(
+      bindingsA.generalOne
+        .openclawSessionKey
+    ).toBe(
+      bindingsA.generalTwo
+        .openclawSessionKey
+    );
+
+    expect(
+      new Set([
+        bindingsA.generalOne
+          .openclawSessionKey,
+        bindingsA.booking
+          .openclawSessionKey,
+        bindingsA.property
+          .openclawSessionKey,
+        generalB.openclawSessionKey
+      ]).size
+    ).toBe(4);
+
+    expect(
+      bindingsA.booking.contextKey
+    ).toBe(
+      `BOOKING:${bookingId.toLowerCase()}`
+    );
+
+    expect(
+      bindingsA.property.contextKey
+    ).toBe(
+      `PROPERTY:${propertyId.toLowerCase()}`
+    );
   });
 
   it("keeps audit append-only for the application role", async () => {
