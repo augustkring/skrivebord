@@ -7,7 +7,7 @@ import type {
   AuditWrite,
   ApprovalRecord
 } from "@skrivebord/actions";
-import { and, eq } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import type { SkrivebordDatabase } from "./client";
 import {
   actionExecution,
@@ -151,12 +151,53 @@ export class PostgresActionStore implements ActionStore {
     }
 
     if (existing.state === "FAILED") {
+      if (existing.retryable) {
+        const [reclaimed] = await this.db
+          .update(actionExecution)
+          .set({
+            state: "PENDING",
+            attemptCount: sql`${actionExecution.attemptCount} + 1`,
+            errorCode: null,
+            failureSummary: null,
+            retryable: false,
+            completedAt: null,
+            updatedAt: new Date(execution.createdAt)
+          })
+          .where(
+            and(
+              eq(actionExecution.id, existing.id),
+              eq(
+                actionExecution.workspaceId,
+                execution.workspaceId
+              ),
+              eq(actionExecution.state, "FAILED"),
+              eq(actionExecution.retryable, true)
+            )
+          )
+          .returning({
+            id: actionExecution.id
+          });
+
+        if (reclaimed) {
+          return {
+            type: "CLAIMED",
+            executionId: reclaimed.id
+          };
+        }
+
+        return {
+          type: "IN_PROGRESS",
+          executionId: existing.id
+        };
+      }
+
       return {
         type: "FAILED",
         executionId: existing.id,
         errorCode:
           existing.errorCode ??
-          undefined
+          undefined,
+        retryable: false
       };
     }
 
@@ -218,7 +259,9 @@ export class PostgresActionStore implements ActionStore {
           input.externalEffectRefs,
         completedAt,
         updatedAt: completedAt,
-        errorCode: null
+        errorCode: null,
+        failureSummary: null,
+        retryable: false
       })
       .where(
         and(
@@ -246,6 +289,8 @@ export class PostgresActionStore implements ActionStore {
   async failExecution(input: {
     executionId: string;
     errorCode?: string;
+    failureSummary?: string;
+    retryable: boolean;
     failedAt: string;
   }): Promise<void> {
     const failedAt =
@@ -257,6 +302,9 @@ export class PostgresActionStore implements ActionStore {
         state: "FAILED",
         errorCode:
           input.errorCode ?? null,
+        failureSummary:
+          input.failureSummary ?? null,
+        retryable: input.retryable,
         lastErrorAt: failedAt,
         completedAt: failedAt,
         updatedAt: failedAt
@@ -384,7 +432,8 @@ export class PostgresActionStore implements ActionStore {
       approvalId: event.approvalId,
       requestId: event.requestId,
       source: event.source,
-      outcome: event.outcome
+      outcome: event.outcome,
+      metadata: event.metadata ?? {}
     });
   }
 }
