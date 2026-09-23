@@ -167,7 +167,14 @@ export async function GET(request: Request) {
       running:
         history.sessionInfo
           ?.hasActiveRun ??
-        false
+        false,
+      runId:
+        history.inFlightRun
+          ?.runId ??
+        history.sessionInfo
+          ?.activeRunIds
+          ?.[0] ??
+        null
     });
   } catch {
     return Response.json(
