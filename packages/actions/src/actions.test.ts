@@ -309,6 +309,100 @@ describe("Action Layer", () => {
     expect(store.approvals.size).toBe(1);
   });
 
+
+  it("executes an approved action on the original intent without requesting approval again", async () => {
+    const store =
+      new InMemoryActionStore();
+    let executions = 0;
+
+    const reviewDefinition = {
+      id: "calendar.move",
+      input: z.object({
+        workspaceId: z.string(),
+        eventId: z.string()
+      }).strict(),
+      requiredCapabilities: [
+        "message.send"
+      ],
+      risk: () =>
+        "MEDIUM" as const,
+      idempotency:
+        "REQUIRED" as const,
+      approval: {
+        requiredApproverScope:
+          "OWNER",
+        consequenceSummary:
+          () =>
+            "Flytter kalenderbegivenheden.",
+        reversibility:
+          "PARTIALLY_REVERSIBLE" as const
+      },
+      execute: async () => {
+        executions += 1;
+        return {
+          moved: true
+        };
+      }
+    };
+
+    const pending =
+      await executeAction({
+        definition:
+          reviewDefinition,
+        principal: agent,
+        rawInput: {
+          workspaceId: "ws_a",
+          eventId: "event-1"
+        },
+        idempotencyKey:
+          "approved-intent-1",
+        store
+      });
+
+    expect(pending.status).toBe(
+      "PENDING_APPROVAL"
+    );
+    expect(executions).toBe(0);
+
+    const approvedHuman: PrincipalContext = {
+      ...human,
+      capabilities: [
+        ...human.capabilities,
+        "message.send"
+      ]
+    };
+
+    const executed =
+      await executeAction({
+        definition:
+          reviewDefinition,
+        principal:
+          approvedHuman,
+        rawInput: {
+          workspaceId: "ws_a",
+          eventId: "event-1"
+        },
+        idempotencyKey:
+          "approved-intent-1",
+        approvalId:
+          pending.approvalId,
+        approvalGranted: true,
+        existingIntentId:
+          pending.actionId,
+        store
+      });
+
+    expect(executed.status).toBe(
+      "SUCCEEDED"
+    );
+    expect(executed.actionId).toBe(
+      pending.actionId
+    );
+    expect(executions).toBe(1);
+    expect(store.intents).toHaveLength(1);
+    expect(store.executions.size).toBe(1);
+  });
+
   it("persists an exact approval object when policy requires review", async () => {
     const store = new InMemoryActionStore();
     const sendDefinition = {
