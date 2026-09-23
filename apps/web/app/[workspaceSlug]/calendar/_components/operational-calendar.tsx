@@ -2,6 +2,7 @@
 
 import FullCalendar from "@fullcalendar/react";
 import dayGridPlugin from "@fullcalendar/react/daygrid";
+import interactionPlugin from "@fullcalendar/react/interaction";
 import listPlugin from "@fullcalendar/react/list";
 import timeGridPlugin from "@fullcalendar/react/timegrid";
 import daLocale from "@fullcalendar/react/locales/da";
@@ -10,6 +11,7 @@ import {
   useMemo,
   useState
 } from "react";
+import { useRouter } from "next/navigation";
 import {
   MoveCalendarEvent
 } from "./move-calendar-event";
@@ -46,10 +48,15 @@ export function OperationalCalendar({
   canUpdateCalendar: boolean;
   events: OperationalCalendarEvent[];
 }) {
+  const router =
+    useRouter();
+
   const [selectedId, setSelectedId] =
     useState<string | null>(
       events[0]?.id ?? null
     );
+  const [calendarMessage, setCalendarMessage] =
+    useState("");
 
   const selected =
     events.find(
@@ -79,6 +86,22 @@ export function OperationalCalendar({
                   undefined,
             allDay:
               event.allDay,
+            editable:
+              canUpdateCalendar &&
+              event.provider ===
+                "GOOGLE" &&
+              event.writable &&
+              event.syncState ===
+                "CONNECTED" &&
+              event.status ===
+                "CONFIRMED" &&
+              !event.allDay &&
+              Boolean(
+                event.startAt &&
+                event.endAt
+              ) &&
+              !event.recurrenceRule,
+            durationEditable: false,
             extendedProps: {
               sourceName:
                 event.sourceName,
@@ -91,7 +114,10 @@ export function OperationalCalendar({
             }
           })
         ),
-      [events]
+      [
+        canUpdateCalendar,
+        events
+      ]
     );
 
   return (
@@ -101,6 +127,7 @@ export function OperationalCalendar({
           plugins={[
             classicThemePlugin,
             dayGridPlugin,
+            interactionPlugin,
             timeGridPlugin,
             listPlugin
           ]}
@@ -134,6 +161,93 @@ export function OperationalCalendar({
               info.event.id
             );
           }}
+          eventDrop={(info) => {
+            void (async () => {
+              const start =
+                info.event.start;
+              const end =
+                info.event.end;
+
+              if (!start || !end) {
+                info.revert();
+                return;
+              }
+
+              setCalendarMessage(
+                "Gemmer ændringen…"
+              );
+
+              try {
+                const response =
+                  await fetch(
+                    "/api/actions/calendar/move",
+                    {
+                      method:
+                        "POST",
+                      headers: {
+                        "content-type":
+                          "application/json"
+                      },
+                      body:
+                        JSON.stringify({
+                          workspaceSlug,
+                          eventId:
+                            info.event.id,
+                          startsAt:
+                            start.toISOString(),
+                          endsAt:
+                            end.toISOString(),
+                          scope:
+                            "OCCURRENCE",
+                          idempotencyKey:
+                            crypto.randomUUID()
+                        })
+                    }
+                  );
+
+                const result =
+                  (await response
+                    .json()
+                    .catch(
+                      () => null
+                    )) as
+                    | {
+                        status?:
+                          string;
+                        humanSummary?:
+                          string;
+                      }
+                    | null;
+
+                if (
+                  !response.ok ||
+                  result?.status !==
+                    "SUCCEEDED"
+                ) {
+                  info.revert();
+                  setCalendarMessage(
+                    result
+                      ?.humanSummary ??
+                      "Kalenderændringen kunne ikke gennemføres."
+                  );
+                  router.refresh();
+                  return;
+                }
+
+                setCalendarMessage(
+                  result.humanSummary ??
+                    "Kalenderen er opdateret."
+                );
+                router.refresh();
+              } catch {
+                info.revert();
+                setCalendarMessage(
+                  "Kalenderændringen kunne ikke bekræftes. Kalenderen genindlæses."
+                );
+                router.refresh();
+              }
+            })();
+          }}
           eventClass={() =>
             "cursor-pointer"
           }
@@ -148,6 +262,14 @@ export function OperationalCalendar({
       </div>
 
       <aside className="self-start rounded-lg border border-[var(--border-default)] bg-white p-4 xl:sticky xl:top-4">
+        {calendarMessage ? (
+          <p
+            className="mb-4 rounded-md bg-[var(--surface-muted)] px-3 py-2 text-xs leading-5 text-[var(--text-secondary)]"
+            role="status"
+          >
+            {calendarMessage}
+          </p>
+        ) : null}
         {selected ? (
           <>
             <div className="text-xs font-semibold uppercase tracking-[0.12em] text-[var(--text-muted)]">
