@@ -186,6 +186,10 @@ export const calendarEvent = pgTable("calendar_event", {
   allDay: boolean("all_day").notNull().default(false),
   timezone: text("timezone"),
   recurrenceMasterId: text("recurrence_master_id"),
+  recurrenceOriginalStartAt: timestamp(
+    "recurrence_original_start_at",
+    { withTimezone: true }
+  ),
   recurrenceRule: text("recurrence_rule"),
   status: text("status").notNull().default("CONFIRMED"),
   category: text("category").notNull(),
