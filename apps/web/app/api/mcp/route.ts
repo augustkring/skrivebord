@@ -127,11 +127,26 @@ function mapTodayItem(
 }
 
 function mapCalendarEvent(
-  event: Awaited<
-    ReturnType<
-      typeof listCalendarEvents
-    >
-  >[number]
+  event: {
+    id: string;
+    title: string;
+    category: string;
+    startAt: Date | null;
+    endAt: Date | null;
+    startDate: string | null;
+    endDate: string | null;
+    allDay: boolean;
+    timezone: string | null;
+    recurrenceMasterId:
+      string | null;
+    recurrenceRule:
+      string | null;
+    status: string;
+    provider: string;
+    sourceName: string;
+    writable: boolean;
+    syncState: string;
+  }
 ) {
   return {
     id: event.id,
