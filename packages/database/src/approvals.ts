@@ -113,7 +113,13 @@ export async function getApprovalIntent(
       parameters:
         actionIntent.parameters,
       intentState:
-        actionIntent.state
+        actionIntent.state,
+      idempotencyKey:
+        actionIntent.idempotencyKey,
+      approvedAt:
+        actionIntent.approvedAt,
+      approvedByPrincipalId:
+        actionIntent.approvedByPrincipalId
     })
     .from(approvalRequest)
     .innerJoin(
@@ -189,4 +195,46 @@ export async function getPendingApprovalByIntent(
     .limit(1);
 
   return row;
+}
+
+
+export async function markActionIntentApproved(
+  db: SkrivebordDatabase,
+  input: {
+    workspaceId: string;
+    actionIntentId: string;
+    approvedByPrincipalId: string;
+    approvedAt?: Date;
+  }
+): Promise<void> {
+  const rows = await db
+    .update(actionIntent)
+    .set({
+      approvedAt:
+        input.approvedAt ??
+        new Date(),
+      approvedByPrincipalId:
+        input.approvedByPrincipalId
+    })
+    .where(
+      and(
+        eq(
+          actionIntent.workspaceId,
+          input.workspaceId
+        ),
+        eq(
+          actionIntent.id,
+          input.actionIntentId
+        )
+      )
+    )
+    .returning({
+      id: actionIntent.id
+    });
+
+  if (rows.length !== 1) {
+    throw new Error(
+      "ACTION_INTENT_NOT_FOUND"
+    );
+  }
 }
