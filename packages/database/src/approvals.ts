@@ -147,3 +147,46 @@ export async function getApprovalIntent(
 
   return row;
 }
+
+
+export async function getPendingApprovalByIntent(
+  db: SkrivebordDatabase,
+  input: {
+    workspaceId: string;
+    actionIntentId: string;
+  }
+) {
+  const [row] = await db
+    .select({
+      id: approvalRequest.id,
+      actionIntentId:
+        approvalRequest.actionIntentId,
+      state:
+        approvalRequest.state
+    })
+    .from(approvalRequest)
+    .where(
+      and(
+        eq(
+          approvalRequest.workspaceId,
+          input.workspaceId
+        ),
+        eq(
+          approvalRequest.actionIntentId,
+          input.actionIntentId
+        ),
+        eq(
+          approvalRequest.state,
+          "PENDING"
+        )
+      )
+    )
+    .orderBy(
+      desc(
+        approvalRequest.createdAt
+      )
+    )
+    .limit(1);
+
+  return row;
+}
