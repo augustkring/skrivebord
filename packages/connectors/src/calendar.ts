@@ -58,12 +58,24 @@ export type CalendarEventWrite = {
   recurrence?: string[];
 };
 
+export type CalendarEventPatch = {
+  title?: string;
+  description?: string;
+  start?:
+    | { dateTime: string; timeZone?: string }
+    | { date: string };
+  end?:
+    | { dateTime: string; timeZone?: string }
+    | { date: string };
+  recurrence?: string[];
+};
+
 export type UpdateCalendarEventInput = {
   accessToken: string;
   calendarId: string;
   eventId: string;
   providerVersion?: string;
-  event: CalendarEventWrite;
+  event: CalendarEventPatch;
 };
 
 export type CreateCalendarEventInput = {
