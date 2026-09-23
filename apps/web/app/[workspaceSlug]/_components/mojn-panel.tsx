@@ -38,6 +38,7 @@ type HistoryResponse = {
   humanSummary?: string;
   messages?: DisplayMessage[];
   running?: boolean;
+  runId?: string | null;
 };
 
 export function MojnPanel({
@@ -62,6 +63,8 @@ export function MojnPanel({
     useState<DisplayMessage[]>([]);
   const [sending, setSending] =
     useState(false);
+  const [pendingRunId, setPendingRunId] =
+    useState<string | null>(null);
   const [error, setError] =
     useState("");
   const scrollRef =
@@ -149,11 +152,15 @@ export function MojnPanel({
         );
 
         if (result.running) {
+          setPendingRunId(
+            result.runId ?? null
+          );
           setStatus("RUNNING");
           setStatusText(
             "Mojn arbejder…"
           );
         } else {
+          setPendingRunId(null);
           setStatus("READY");
           setStatusText(
             "Mojn kører normalt."
@@ -224,7 +231,74 @@ export function MojnPanel({
 
     const timer = window.setInterval(
       () => {
-        void loadHistory();
+        void (async () => {
+          if (!pendingRunId) {
+            await loadHistory();
+            return;
+          }
+
+          const query =
+            new URLSearchParams({
+              workspaceSlug,
+              runId: pendingRunId
+            });
+
+          const response = await fetch(
+            `/api/agent/run?${query.toString()}`,
+            {
+              cache: "no-store"
+            }
+          );
+
+          const result = (await response
+            .json()
+            .catch(() => null)) as
+            | {
+                status?: string;
+                humanSummary?: string;
+              }
+            | null;
+
+          if (
+            result?.status === "SUCCEEDED"
+          ) {
+            setPendingRunId(null);
+            setStatus("READY");
+            setStatusText(
+              "Mojn kører normalt."
+            );
+            await loadHistory();
+            return;
+          }
+
+          if (
+            result?.status === "FAILED" ||
+            result?.status === "CANCELLED"
+          ) {
+            setPendingRunId(null);
+            setStatus("ERROR");
+            setStatusText(
+              result.humanSummary ??
+                "Mojn kunne ikke færdiggøre opgaven."
+            );
+            setError(
+              result.humanSummary ??
+                "Mojn kunne ikke færdiggøre opgaven."
+            );
+            await loadHistory();
+            return;
+          }
+
+          if (
+            result?.status === "UNAVAILABLE"
+          ) {
+            setStatus("UNAVAILABLE");
+            setStatusText(
+              result.humanSummary ??
+                "Mojn kan ikke kontaktes lige nu."
+            );
+          }
+        })();
       },
       2500
     );
@@ -232,7 +306,13 @@ export function MojnPanel({
     return () => {
       window.clearInterval(timer);
     };
-  }, [loadHistory, open, status]);
+  }, [
+    loadHistory,
+    open,
+    pendingRunId,
+    status,
+    workspaceSlug
+  ]);
 
   useEffect(() => {
     scrollRef.current?.scrollTo({
@@ -301,12 +381,16 @@ export function MojnPanel({
             status?: string;
             humanSummary?: string;
             reply?: string | null;
+            runId?: string;
           }
         | null;
 
       if (
         result?.status === "RUNNING"
       ) {
+        setPendingRunId(
+          result.runId ?? null
+        );
         setStatus("RUNNING");
         setStatusText(
           result.humanSummary ??
@@ -320,6 +404,7 @@ export function MojnPanel({
         result?.status ===
           "SUCCEEDED"
       ) {
+        setPendingRunId(null);
         setStatus("READY");
         setStatusText(
           "Mojn kører normalt."
@@ -348,6 +433,7 @@ export function MojnPanel({
         result?.status ===
         "UNAVAILABLE"
       ) {
+        setPendingRunId(null);
         setStatus("UNAVAILABLE");
         setStatusText(
           result.humanSummary ??
