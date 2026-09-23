@@ -343,3 +343,45 @@ export async function listRecentAgentRuns(
       )
   });
 }
+
+
+export async function markAgentRuntimeStatus(
+  db: SkrivebordDatabase,
+  input: {
+    workspaceId: string;
+    runtimeAgentKey: string;
+    status:
+      | "UNKNOWN"
+      | "READY"
+      | "UNAVAILABLE"
+      | "ERROR";
+    seenAt?: Date;
+    now?: Date;
+  }
+): Promise<void> {
+  const now = input.now ?? new Date();
+
+  await db
+    .update(agentProfile)
+    .set({
+      status: input.status,
+      lastSeenAt:
+        input.seenAt ??
+        (input.status === "READY"
+          ? now
+          : undefined),
+      updatedAt: now
+    })
+    .where(
+      and(
+        eq(
+          agentProfile.workspaceId,
+          input.workspaceId
+        ),
+        eq(
+          agentProfile.runtimeAgentKey,
+          input.runtimeAgentKey
+        )
+      )
+    );
+}
