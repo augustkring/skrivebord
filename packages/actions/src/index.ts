@@ -226,8 +226,10 @@ export class InMemoryActionStore implements ActionStore {
     }
 
     if (
+      existing.actionId !==
+        intent.actionId ||
       existing.parametersDigest !==
-      intent.parametersDigest
+        intent.parametersDigest
     ) {
       return {
         type: "KEY_REUSED",
