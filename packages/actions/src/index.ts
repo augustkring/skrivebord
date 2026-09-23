@@ -439,6 +439,7 @@ export async function executeAction<Input, Result>(args: {
   idempotencyKey?: string;
   approvalId?: string;
   approvalGranted?: boolean;
+  existingIntentId?: string;
 }): Promise<ToolResult<Result>> {
   const parsed = args.definition.input.safeParse(args.rawInput);
   if (!parsed.success) {
@@ -488,7 +489,9 @@ export async function executeAction<Input, Result>(args: {
     externalCommunication: args.definition.externalCommunication
   });
 
-  let id = newId();
+  let id =
+    args.existingIntentId ??
+    newId();
   const summary = args.definition.preview
     ? await args.definition.preview(ctx)
     : args.definition.id;
@@ -522,7 +525,10 @@ export async function executeAction<Input, Result>(args: {
     createdAt: now.toISOString()
   };
 
-  if (intentIdempotencyKey) {
+  if (args.existingIntentId) {
+    // The exact intent already exists and has been
+    // validated through the approval binding.
+  } else if (intentIdempotencyKey) {
     const intentClaim =
       await args.store.claimIntent(
         intent
