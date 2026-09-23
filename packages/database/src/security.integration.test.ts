@@ -450,7 +450,31 @@ describeDatabase("database tenant isolation", () => {
     await withPrincipalTransaction(
       pool,
       system,
-      async ({ db }) => {
+      async ({ db, client }) => {
+        const oldKeyId =
+          `key-old-${suffix}`;
+        const conflictKeyId =
+          `key-conflict-${suffix}`;
+        const newKeyId =
+          `key-new-${suffix}`;
+
+        for (const keyId of [
+          oldKeyId,
+          conflictKeyId,
+          newKeyId
+        ]) {
+          await client.query(
+            'insert into "apikey" ("id", "configId", "name", "referenceId", "key", "enabled", "createdAt", "updatedAt") values ($1, $2, $3, $4, $5, true, now(), now())',
+            [
+              keyId,
+              "agent-keys",
+              "Mojn test",
+              workspaceA,
+              `hashed-${keyId}`
+            ]
+          );
+        }
+
         const first = await bindAgentCredential(
           db,
           {
@@ -458,8 +482,7 @@ describeDatabase("database tenant isolation", () => {
             name: "Mojn",
             runtimeAgentKey:
               `mojn-${suffix}`,
-            apiKeyId:
-              `key-old-${suffix}`,
+            apiKeyId: oldKeyId,
             capabilities: [
               "today.read",
               "today.manage"
@@ -476,7 +499,7 @@ describeDatabase("database tenant isolation", () => {
               runtimeAgentKey:
                 `mojn-${suffix}`,
               apiKeyId:
-                `key-conflict-${suffix}`,
+                conflictKeyId,
               capabilities: [
                 "today.read"
               ]
@@ -518,7 +541,7 @@ describeDatabase("database tenant isolation", () => {
               runtimeAgentKey:
                 `mojn-${suffix}`,
               apiKeyId:
-                `key-new-${suffix}`,
+                newKeyId,
               capabilities: [
                 "today.read",
                 "today.manage"
