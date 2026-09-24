@@ -3,7 +3,7 @@ import type {
   CalendarMoveTarget
 } from "@skrivebord/database";
 import {
-  buildGoogleCalendarMovePatch,
+  buildCalendarMovePatch,
   calendarMoveFailurePresentation,
   CalendarMoveError
 } from "./calendar-move";
@@ -45,7 +45,7 @@ function target(
 describe("Google calendar move semantics", () => {
   it("moves a standalone event without changing its duration", () => {
     const patch =
-      buildGoogleCalendarMovePatch({
+      buildCalendarMovePatch({
         target: target(),
         command: {
           workspaceId: "workspace-a",
@@ -78,7 +78,7 @@ describe("Google calendar move semantics", () => {
 
   it("moves a concrete recurring instance without shifting the series master", () => {
     const patch =
-      buildGoogleCalendarMovePatch({
+      buildCalendarMovePatch({
         target: target({
           providerEventId:
             "instance-20260925",
@@ -118,7 +118,7 @@ describe("Google calendar move semantics", () => {
 
   it("allows Microsoft events through the same move semantics", () => {
     const patch =
-      buildGoogleCalendarMovePatch({
+      buildCalendarMovePatch({
         target: target({
           provider:
             "MICROSOFT",
@@ -150,7 +150,7 @@ describe("Google calendar move semantics", () => {
 
   it("allows moves when the synchronized source is healthy", () => {
     const patch =
-      buildGoogleCalendarMovePatch({
+      buildCalendarMovePatch({
         target: target({
           syncState: "HEALTHY"
         }),
@@ -177,7 +177,7 @@ describe("Google calendar move semantics", () => {
 
   it("requires a provider version before a write can be attempted", () => {
     expect(() =>
-      buildGoogleCalendarMovePatch({
+      buildCalendarMovePatch({
         target: target({
           providerVersion:
             undefined
@@ -203,7 +203,7 @@ describe("Google calendar move semantics", () => {
 
   it("moves the recurring master by the selected occurrence delta for SERIES", () => {
     const patch =
-      buildGoogleCalendarMovePatch({
+      buildCalendarMovePatch({
         target: target({
           requestedStartAt:
             new Date(
@@ -257,7 +257,7 @@ describe("Google calendar move semantics", () => {
 
   it("uses originalStartTime when an exception is used to move the whole series", () => {
     const patch =
-      buildGoogleCalendarMovePatch({
+      buildCalendarMovePatch({
         target: target({
           requestedStartAt:
             new Date(
@@ -315,7 +315,7 @@ describe("Google calendar move semantics", () => {
 
   it("rejects series moves from an instance when originalStartTime is missing", () => {
     expect(() =>
-      buildGoogleCalendarMovePatch({
+      buildCalendarMovePatch({
         target: target({
           requestedRecurrenceMasterId:
             "series-master",
@@ -348,7 +348,7 @@ describe("Google calendar move semantics", () => {
 
   it("rejects moving only one occurrence when the selected row is the recurring master", () => {
     expect(() =>
-      buildGoogleCalendarMovePatch({
+      buildCalendarMovePatch({
         target: target({
           recurrenceRule:
             "RRULE:FREQ=WEEKLY",
@@ -375,7 +375,7 @@ describe("Google calendar move semantics", () => {
 
   it("rejects resize disguised as a move", () => {
     expect(() =>
-      buildGoogleCalendarMovePatch({
+      buildCalendarMovePatch({
         target: target(),
         command: {
           workspaceId: "workspace-a",
@@ -440,7 +440,7 @@ describe("Google calendar move semantics", () => {
 
   it("rejects non-writable and all-day sources before provider access", () => {
     expect(() =>
-      buildGoogleCalendarMovePatch({
+      buildCalendarMovePatch({
         target: target({
           writable: false
         }),
@@ -461,7 +461,7 @@ describe("Google calendar move semantics", () => {
     });
 
     expect(() =>
-      buildGoogleCalendarMovePatch({
+      buildCalendarMovePatch({
         target: target({
           allDay: true
         }),
