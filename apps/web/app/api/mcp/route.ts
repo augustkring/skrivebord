@@ -18,8 +18,8 @@ import { createMcpHandler } from "mcp-handler";
 import { z } from "zod";
 import { databasePool } from "@/lib/database";
 import {
-  createMoveGoogleCalendarEventAction
-} from "@/lib/google-calendar-actions";
+  createMoveCalendarEventAction
+} from "@/lib/calendar-actions";
 import { resolveMcpAgentPrincipal } from "@/lib/mcp-auth";
 
 export const dynamic = "force-dynamic";
@@ -710,7 +710,7 @@ function buildHandler(principal: PrincipalContext) {
             const result =
               await executeAction({
                 definition:
-                  createMoveGoogleCalendarEventAction(),
+                  createMoveCalendarEventAction(),
                 principal,
                 rawInput: {
                   workspaceId:
