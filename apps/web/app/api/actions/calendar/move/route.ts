@@ -9,8 +9,8 @@ import {
 } from "@skrivebord/database";
 import { z } from "zod";
 import {
-  createMoveGoogleCalendarEventAction
-} from "@/lib/google-calendar-actions";
+  createMoveCalendarEventAction
+} from "@/lib/calendar-actions";
 import {
   calendarMoveFailurePresentation
 } from "@/lib/calendar-move";
@@ -21,6 +21,9 @@ import {
 import {
   runGoogleCalendarSync
 } from "@/lib/google-sync";
+import {
+  runMicrosoftCalendarSync
+} from "@/lib/microsoft-sync";
 
 const RequestSchema = z.object({
   workspaceSlug:
@@ -94,7 +97,7 @@ export async function POST(
   const result =
     await executeAction({
       definition:
-        createMoveGoogleCalendarEventAction(),
+        createMoveCalendarEventAction(),
       principal,
       rawInput: {
         workspaceId:
@@ -139,25 +142,42 @@ export async function POST(
       );
     } catch {
       try {
-        await runGoogleCalendarSync({
-          workspaceId:
-            principal.workspaceId,
-          sourceIds: [
-            result.data
-              .calendarSourceId
-          ]
-        });
+        if (
+          result.data.provider ===
+          "GOOGLE"
+        ) {
+          await runGoogleCalendarSync({
+            workspaceId:
+              principal.workspaceId,
+            sourceIds: [
+              result.data
+                .calendarSourceId
+            ]
+          });
+        } else {
+          await runMicrosoftCalendarSync({
+            workspaceId:
+              principal.workspaceId,
+            sourceIds: [
+              result.data
+                .calendarSourceId
+            ]
+          });
+        }
       } catch {
         return Response.json(
           {
             ...result,
             humanSummary:
-              "Begivenheden blev ændret hos Google. Den lokale kalender afventer ny synkronisering.",
+              "Begivenheden blev ændret hos kalenderudbyderen. Den lokale kalender afventer ny synkronisering.",
             recovery: {
               label:
                 "Synkronisér kalender",
               action:
-                "connection.google.sync"
+                result.data.provider ===
+                "GOOGLE"
+                  ? "connection.google.sync"
+                  : "connection.microsoft.sync"
             }
           },
           { status: 200 }
