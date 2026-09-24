@@ -5,7 +5,7 @@ import {
 } from "node:crypto";
 
 export type ConnectorOAuthState = {
-  provider: "GOOGLE";
+  provider: "GOOGLE" | "MICROSOFT";
   workspaceId: string;
   workspaceSlug: string;
   principalId: string;
@@ -38,7 +38,7 @@ function assertSafeReturnPath(path: string): void {
 }
 
 export function createConnectorOAuthState(input: {
-  provider: "GOOGLE";
+  provider: "GOOGLE" | "MICROSOFT";
   workspaceId: string;
   workspaceSlug: string;
   principalId: string;
@@ -117,7 +117,12 @@ export function verifyConnectorOAuthState(input: {
   assertSafeReturnPath(payload.returnPath);
 
   if (
-    payload.provider !== "GOOGLE" ||
+    ![
+      "GOOGLE",
+      "MICROSOFT"
+    ].includes(
+      payload.provider
+    ) ||
     !payload.workspaceId ||
     !payload.workspaceSlug ||
     !payload.principalId ||
