@@ -35,6 +35,7 @@ export type OperationalCalendarEvent = {
   sourceName: string;
   writable: boolean;
   syncState: string;
+  lastSyncedAt: string | null;
 };
 
 export function OperationalCalendar({
@@ -91,8 +92,12 @@ export function OperationalCalendar({
               event.provider ===
                 "GOOGLE" &&
               event.writable &&
-              event.syncState ===
-                "CONNECTED" &&
+              [
+                "CONNECTED",
+                "HEALTHY"
+              ].includes(
+                event.syncState
+              ) &&
               event.status ===
                 "CONFIRMED" &&
               !event.allDay &&
@@ -282,14 +287,58 @@ export function OperationalCalendar({
               {" · "}
               {selected.syncState}
             </p>
+            <div className="mt-2 text-xs leading-5 text-[var(--text-muted)]">
+              <div>
+                {selected.writable
+                  ? "Kan redigeres fra Skrivebord"
+                  : "Skrivebeskyttet kilde"}
+              </div>
+              {selected.lastSyncedAt ? (
+                <div>
+                  Senest synkroniseret{" "}
+                  {new Intl.DateTimeFormat(
+                    "da-DK",
+                    {
+                      dateStyle: "short",
+                      timeStyle: "short"
+                    }
+                  ).format(
+                    new Date(
+                      selected.lastSyncedAt
+                    )
+                  )}
+                </div>
+              ) : (
+                <div>
+                  Ingen fuldført synkronisering registreret endnu
+                </div>
+              )}
+              {selected.recurrenceMasterId ? (
+                <div>
+                  Forekomst i en tilbagevendende serie
+                </div>
+              ) : selected.recurrenceRule ? (
+                <div>
+                  Tilbagevendende serie
+                </div>
+              ) : (
+                <div>
+                  Enkeltstående begivenhed
+                </div>
+              )}
+            </div>
 
             <div className="mt-4">
               {canUpdateCalendar &&
               selected.provider ===
                 "GOOGLE" &&
               selected.writable &&
-              selected.syncState ===
-                "CONNECTED" &&
+              [
+                "CONNECTED",
+                "HEALTHY"
+              ].includes(
+                selected.syncState
+              ) &&
               selected.status ===
                 "CONFIRMED" &&
               !selected.allDay &&
