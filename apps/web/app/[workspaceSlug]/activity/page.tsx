@@ -22,7 +22,54 @@ function outcomeLabel(outcome: string): string {
   if (outcome === "PENDING_APPROVAL") return "Afventer godkendelse";
   if (outcome === "DENIED") return "Afvist";
   if (outcome === "FAILED") return "Kunne ikke gennemføres";
+  if (outcome === "REPLAYED_SUCCEEDED_EXECUTION") return "Allerede gennemført";
   return outcome;
+}
+
+function receiptMetadata(
+  value: unknown
+): {
+  externalEffectRefs: string[];
+  errorCode?: string;
+  retryable?: boolean;
+} {
+  if (
+    typeof value !== "object" ||
+    value === null ||
+    Array.isArray(value)
+  ) {
+    return {
+      externalEffectRefs: []
+    };
+  }
+
+  const record =
+    value as Record<string, unknown>;
+
+  return {
+    externalEffectRefs:
+      Array.isArray(
+        record.externalEffectRefs
+      )
+        ? record.externalEffectRefs.filter(
+            (
+              item
+            ): item is string =>
+              typeof item ===
+              "string"
+          )
+        : [],
+    errorCode:
+      typeof record.errorCode ===
+      "string"
+        ? record.errorCode
+        : undefined,
+    retryable:
+      typeof record.retryable ===
+      "boolean"
+        ? record.retryable
+        : undefined
+  };
 }
 
 export default async function ActivityPage({
@@ -112,7 +159,13 @@ export default async function ActivityPage({
 
       {activity.length > 0 ? (
         <div className="border-t border-[var(--border-default)]">
-          {activity.map((event) => (
+          {activity.map((event) => {
+            const receipt =
+              receiptMetadata(
+                event.metadata
+              );
+
+            return (
             <article
               key={event.id}
               className="grid gap-2 border-b border-[var(--border-default)] py-4 sm:grid-cols-[72px_1fr]"
@@ -127,9 +180,28 @@ export default async function ActivityPage({
                 <div className="mt-1 text-sm text-[var(--text-secondary)]">
                   {actorLabel(event.actorType)} · {outcomeLabel(event.outcome)}
                 </div>
+
+                {receipt.externalEffectRefs.length > 0 ? (
+                  <div className="mt-2 text-xs leading-5 text-[var(--text-muted)]">
+                    Ekstern effekt registreret · {receipt.externalEffectRefs.length === 1
+                      ? "1 reference"
+                      : `${receipt.externalEffectRefs.length} referencer`}
+                  </div>
+                ) : null}
+
+                {receipt.errorCode ? (
+                  <div className="mt-2 text-xs leading-5 text-[var(--status-warning)]">
+                    {receipt.retryable
+                      ? "Kan prøves igen"
+                      : "Kræver gennemgang"}
+                    {" · "}
+                    {receipt.errorCode}
+                  </div>
+                ) : null}
               </div>
             </article>
-          ))}
+            );
+          })}
         </div>
       ) : (
         <p className="border-y border-[var(--border-default)] py-5 text-sm text-[var(--text-secondary)]">
