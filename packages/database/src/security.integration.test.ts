@@ -27,6 +27,7 @@ import {
   getCalendarMoveTarget,
   getOrCreateConversationBinding,
   createDatabasePool,
+  listCalendarEvents,
   listTodayItems,
   persistCalendarSync,
   persistCalendarWriteResult,
