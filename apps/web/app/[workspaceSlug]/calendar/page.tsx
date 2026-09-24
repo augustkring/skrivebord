@@ -1,12 +1,16 @@
 import {
   getWorkspaceProfile,
   listCalendarEvents,
+  listCalendarSources,
   withPrincipalTransaction
 } from "@skrivebord/database";
 import { redirect } from "next/navigation";
 import { databasePool } from "@/lib/database";
 import { resolveWorkspaceHumanPrincipal } from "@/lib/principal";
 import { PageTitle } from "../_components/page-title";
+import {
+  CreateCalendarEvent
+} from "./_components/create-calendar-event";
 import {
   OperationalCalendar
 } from "./_components/operational-calendar";
@@ -49,6 +53,11 @@ export default async function CalendarPage({
           await getWorkspaceProfile(
             db,
             principal.workspaceId
+          ),
+        sources:
+          await listCalendarSources(
+            db,
+            principal.workspaceId
           )
       })
     );
@@ -56,6 +65,11 @@ export default async function CalendarPage({
   const canUpdateCalendar =
     principal.capabilities.includes(
       "calendar.update"
+    );
+
+  const canCreateCalendar =
+    principal.capabilities.includes(
+      "calendar.create"
     );
 
   const workspaceTimezone =
@@ -77,6 +91,30 @@ export default async function CalendarPage({
           Måned, uge og liste bygger på den samme normaliserede kalender-cache. Vælg en begivenhed for at se detaljer eller flytte den.
         </p>
       </div>
+
+      {canCreateCalendar ? (
+        <CreateCalendarEvent
+          workspaceSlug={workspaceSlug}
+          workspaceTimezone={
+            workspaceTimezone
+          }
+          sources={state.sources.map(
+            (source) => ({
+              id: source.id,
+              provider:
+                source.provider,
+              displayName:
+                source.displayName,
+              writable:
+                source.writable,
+              isPrimary:
+                source.isPrimary,
+              syncState:
+                source.syncState
+            })
+          )}
+        />
+      ) : null}
 
       {state.events.length ===
       0 ? (
