@@ -116,6 +116,33 @@ describe("Google calendar move semantics", () => {
     });
   });
 
+  it("allows moves when the synchronized source is healthy", () => {
+    const patch =
+      buildGoogleCalendarMovePatch({
+        target: target({
+          syncState: "HEALTHY"
+        }),
+        command: {
+          workspaceId:
+            "workspace-a",
+          eventId:
+            "11111111-1111-4111-8111-111111111111",
+          startsAt:
+            "2026-09-25T10:00:00Z",
+          endsAt:
+            "2026-09-25T11:00:00Z",
+          scope:
+            "OCCURRENCE"
+        }
+      });
+
+    expect(
+      patch.start.dateTime
+    ).toBe(
+      "2026-09-25T10:00:00.000Z"
+    );
+  });
+
   it("requires a provider version before a write can be attempted", () => {
     expect(() =>
       buildGoogleCalendarMovePatch({
