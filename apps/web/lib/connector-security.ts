@@ -10,6 +10,14 @@ export type GoogleOAuthRuntimeConfig = {
   stateSecret: string;
 };
 
+export type MicrosoftOAuthRuntimeConfig = {
+  tenant: string;
+  clientId: string;
+  clientSecret: string;
+  redirectUri: string;
+  stateSecret: string;
+};
+
 function requiredEnv(name: string): string {
   const value = process.env[name]?.trim();
   if (!value) {
@@ -30,6 +38,28 @@ export function getGoogleOAuthRuntimeConfig(): GoogleOAuthRuntimeConfig {
     clientSecret: requiredEnv("GOOGLE_CLIENT_SECRET"),
     redirectUri: callback.toString(),
     stateSecret: requiredEnv("CONNECTOR_STATE_SECRET")
+  };
+}
+
+export function getMicrosoftOAuthRuntimeConfig(): MicrosoftOAuthRuntimeConfig {
+  const baseUrl = new URL(requiredEnv("BETTER_AUTH_URL"));
+  const callback = new URL(
+    "/api/connections/microsoft/callback",
+    baseUrl
+  );
+
+  return {
+    tenant:
+      process.env.MICROSOFT_TENANT?.trim() ||
+      "common",
+    clientId:
+      requiredEnv("MICROSOFT_CLIENT_ID"),
+    clientSecret:
+      requiredEnv("MICROSOFT_CLIENT_SECRET"),
+    redirectUri:
+      callback.toString(),
+    stateSecret:
+      requiredEnv("CONNECTOR_STATE_SECRET")
   };
 }
 
