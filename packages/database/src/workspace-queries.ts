@@ -377,3 +377,44 @@ export async function searchCalendarEvents(
       )
   );
 }
+
+
+export async function listCalendarSources(
+  db: SkrivebordDatabase,
+  workspaceId: string
+) {
+  return db
+    .select({
+      id:
+        calendarSource.id,
+      provider:
+        calendarSource.provider,
+      displayName:
+        calendarSource.displayName,
+      writable:
+        calendarSource.writable,
+      isPrimary:
+        calendarSource.isPrimary,
+      accessRole:
+        calendarSource.accessRole,
+      syncState:
+        calendarSource.syncState,
+      lastSyncedAt:
+        calendarSource.lastSyncedAt
+    })
+    .from(calendarSource)
+    .where(
+      eq(
+        calendarSource.workspaceId,
+        workspaceId
+      )
+    )
+    .orderBy(
+      desc(
+        calendarSource.isPrimary
+      ),
+      asc(
+        calendarSource.displayName
+      )
+    );
+}
