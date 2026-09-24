@@ -15,3 +15,5 @@ export * from "./conversations";
 export * from "./calendar-write";
 export * from "./approvals";
 export * from "./action-status";
+export * from "./microsoft-connection";
+export * from "./microsoft-sync-context";
