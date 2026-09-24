@@ -143,11 +143,6 @@ export function OperationalCalendar({
             right:
               "dayGridMonth,timeGridWeek,listWeek"
           }}
-          buttonText={{
-            month: "Måned",
-            week: "Uge",
-            list: "Liste"
-          }}
           firstDay={1}
           height="auto"
           expandRows
