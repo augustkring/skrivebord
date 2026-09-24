@@ -333,41 +333,50 @@ export async function POST(
       await withPrincipalTransaction(
         databasePool,
         principal,
-        ({ db }) =>
-          "localTargetEventId" in
-          result.data!
-            ? persistCalendarWriteResult(
-                db,
-                {
-                  workspaceId:
-                    principal.workspaceId,
-                  localTargetEventId:
-                    result.data!
-                      .localTargetEventId,
-                  providerResult:
-                    result.data!
-                      .providerResult
-                }
-              )
-            : persistCreatedCalendarEvent(
-                db,
-                {
-                  workspaceId:
-                    principal.workspaceId,
-                  calendarSourceId:
-                    result.data!
-                      .calendarSourceId,
-                  providerResult:
-                    result.data!
-                      .providerResult,
-                  originActorType:
-                    intent
-                      .requestedByPrincipalType,
-                  originActorId:
-                    intent
-                      .requestedByPrincipalId
-                }
-              )
+        async ({ db }) => {
+          const data =
+            result.data!;
+
+          if (
+            "localTargetEventId" in
+              data &&
+            typeof data
+              .localTargetEventId ===
+              "string"
+          ) {
+            await persistCalendarWriteResult(
+              db,
+              {
+                workspaceId:
+                  principal.workspaceId,
+                localTargetEventId:
+                  data.localTargetEventId,
+                providerResult:
+                  data.providerResult
+              }
+            );
+
+            return;
+          }
+
+          await persistCreatedCalendarEvent(
+            db,
+            {
+              workspaceId:
+                principal.workspaceId,
+              calendarSourceId:
+                data.calendarSourceId,
+              providerResult:
+                data.providerResult,
+              originActorType:
+                intent
+                  .requestedByPrincipalType,
+              originActorId:
+                intent
+                  .requestedByPrincipalId
+            }
+          );
+        }
       );
     } catch {
       try {
