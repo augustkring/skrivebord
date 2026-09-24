@@ -50,10 +50,6 @@ export async function listPendingApprovals(
         approvalRequest.expiresAt,
       actionId:
         actionIntent.actionId,
-      requestedByPrincipalId:
-        actionIntent.requestedByPrincipalId,
-      requestedByPrincipalType:
-        actionIntent.requestedByPrincipalType,
       parameters:
         actionIntent.parameters,
       riskLevel:
@@ -114,6 +110,10 @@ export async function getApprovalIntent(
           .targetFingerprint,
       actionId:
         actionIntent.actionId,
+      requestedByPrincipalId:
+        actionIntent.requestedByPrincipalId,
+      requestedByPrincipalType:
+        actionIntent.requestedByPrincipalType,
       parameters:
         actionIntent.parameters,
       intentState:
