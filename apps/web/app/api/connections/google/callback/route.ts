@@ -69,6 +69,13 @@ export async function GET(request: Request) {
     );
   }
 
+  if (state.provider !== "GOOGLE") {
+    return Response.json(
+      { error: "OAUTH_PROVIDER_MISMATCH" },
+      { status: 400 }
+    );
+  }
+
   if (providerError) {
     return redirectWithStatus(
       state.returnPath,
