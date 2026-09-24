@@ -134,7 +134,11 @@ export default async function CalendarPage({
               writable:
                 event.writable,
               syncState:
-                event.syncState
+                event.syncState,
+              lastSyncedAt:
+                event.lastSyncedAt
+                  ?.toISOString() ??
+                null
             })
           )}
         />
