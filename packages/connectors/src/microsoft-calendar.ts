@@ -386,11 +386,32 @@ function writeDateTime(
     };
   }
 
+  const parsed =
+    new Date(
+      value.dateTime
+    );
+
+  if (
+    Number.isNaN(
+      parsed.getTime()
+    )
+  ) {
+    throw new ConnectorError(
+      "Microsoft-write modtog ugyldig event-tid.",
+      "INVALID_RESPONSE",
+      false
+    );
+  }
+
   return {
     dateTime:
-      value.dateTime,
+      parsed
+        .toISOString()
+        .replace(
+          /Z$/,
+          ""
+        ),
     timeZone:
-      value.timeZone ??
       "UTC"
   };
 }
