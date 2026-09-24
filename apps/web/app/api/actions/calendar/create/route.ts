@@ -8,8 +8,7 @@ import {
 } from "@skrivebord/database";
 import { z } from "zod";
 import {
-  createCalendarEventAction,
-  CreateCalendarEventInputSchema
+  createCalendarEventAction
 } from "@/lib/calendar-actions";
 import {
   databasePool
@@ -30,9 +29,10 @@ const RequestSchema = z.object({
   idempotencyKey:
     z.string().uuid(),
   command:
-    CreateCalendarEventInputSchema.omit({
-      workspaceId: true
-    })
+    z.record(
+      z.string(),
+      z.unknown()
+    )
 }).strict();
 
 export async function POST(
