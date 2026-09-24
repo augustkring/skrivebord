@@ -282,7 +282,3 @@ export function calendarMoveFailurePresentation(
       };
   }
 }
-
-
-export const buildGoogleCalendarMovePatch =
-  buildCalendarMovePatch;
