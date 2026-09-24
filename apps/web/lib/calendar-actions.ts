@@ -16,8 +16,7 @@ import {
   getCalendarCreateTarget,
   getCalendarMoveTarget,
   persistCalendarWriteResult,
-  withPrincipalTransaction,
-  type CalendarMoveTarget
+  withPrincipalTransaction
 } from "@skrivebord/database";
 import {
   buildCalendarMovePatch,
