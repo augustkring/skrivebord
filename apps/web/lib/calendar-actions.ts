@@ -30,6 +30,7 @@ import {
 import {
   getMicrosoftAccessContext
 } from "./microsoft-access";
+import { z } from "zod";
 
 export type MoveCalendarEventResult = {
   provider:
@@ -82,7 +83,10 @@ function providerLabel(
 }
 
 async function connectorForTarget(
-  target: CalendarMoveTarget,
+  target: {
+    provider: string;
+    connectorAccountId: string;
+  },
   workspaceId: string,
   requestId: string,
   now: Date
@@ -674,22 +678,7 @@ export function createCalendarEventAction(): ActionDefinition<
         accessToken
       } =
         await connectorForTarget(
-          {
-            ...target,
-            requestedEventId:
-              crypto.randomUUID(),
-            localTargetEventId:
-              crypto.randomUUID(),
-            providerEventId: "",
-            title:
-              input.title,
-            allDay:
-              input.timing
-                .kind ===
-              "ALL_DAY",
-            status:
-              "CONFIRMED"
-          },
+          target,
           principal.workspaceId,
           principal.requestId,
           now
