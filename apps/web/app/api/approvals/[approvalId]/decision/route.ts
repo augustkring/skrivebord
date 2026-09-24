@@ -13,8 +13,8 @@ import {
 } from "@skrivebord/database";
 import { z } from "zod";
 import {
-  createMoveGoogleCalendarEventAction
-} from "@/lib/google-calendar-actions";
+  createMoveCalendarEventAction
+} from "@/lib/calendar-actions";
 import {
   calendarMoveFailurePresentation
 } from "@/lib/calendar-move";
@@ -25,6 +25,9 @@ import {
 import {
   runGoogleCalendarSync
 } from "@/lib/google-sync";
+import {
+  runMicrosoftCalendarSync
+} from "@/lib/microsoft-sync";
 
 const RequestSchema = z.object({
   workspaceSlug:
@@ -284,7 +287,7 @@ export async function POST(
   const result =
     await executeAction({
       definition:
-        createMoveGoogleCalendarEventAction(),
+        createMoveCalendarEventAction(),
       principal,
       rawInput:
         intent.parameters,
@@ -324,14 +327,28 @@ export async function POST(
       );
     } catch {
       try {
-        await runGoogleCalendarSync({
-          workspaceId:
-            principal.workspaceId,
-          sourceIds: [
-            result.data
-              .calendarSourceId
-          ]
-        });
+        if (
+          result.data.provider ===
+          "GOOGLE"
+        ) {
+          await runGoogleCalendarSync({
+            workspaceId:
+              principal.workspaceId,
+            sourceIds: [
+              result.data
+                .calendarSourceId
+            ]
+          });
+        } else {
+          await runMicrosoftCalendarSync({
+            workspaceId:
+              principal.workspaceId,
+            sourceIds: [
+              result.data
+                .calendarSourceId
+            ]
+          });
+        }
       } catch {
         // Provider success is authoritative.
         // The calendar UI can show stale sync state until reconciliation succeeds.
