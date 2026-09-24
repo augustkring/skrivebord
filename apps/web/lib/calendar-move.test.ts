@@ -116,6 +116,38 @@ describe("Google calendar move semantics", () => {
     });
   });
 
+  it("allows Microsoft events through the same move semantics", () => {
+    const patch =
+      buildGoogleCalendarMovePatch({
+        target: target({
+          provider:
+            "MICROSOFT",
+          providerEventId:
+            "ms-event-1",
+          providerVersion:
+            "W/\"etag-1\""
+        }),
+        command: {
+          workspaceId:
+            "workspace-a",
+          eventId:
+            "11111111-1111-4111-8111-111111111111",
+          startsAt:
+            "2026-09-25T10:00:00Z",
+          endsAt:
+            "2026-09-25T11:00:00Z",
+          scope:
+            "OCCURRENCE"
+        }
+      });
+
+    expect(
+      patch.start.dateTime
+    ).toBe(
+      "2026-09-25T10:00:00.000Z"
+    );
+  });
+
   it("allows moves when the synchronized source is healthy", () => {
     const patch =
       buildGoogleCalendarMovePatch({
