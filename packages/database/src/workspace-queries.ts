@@ -84,7 +84,8 @@ export async function listActivityEvents(
       action: auditEvent.action,
       outcome: auditEvent.outcome,
       humanSummary: actionIntent.humanSummary,
-      approvalId: auditEvent.approvalId
+      approvalId: auditEvent.approvalId,
+      metadata: auditEvent.metadata
     })
     .from(auditEvent)
     .leftJoin(
