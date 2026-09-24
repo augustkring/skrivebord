@@ -16,7 +16,7 @@ export class CalendarMoveError extends Error {
   }
 }
 
-export function buildGoogleCalendarMovePatch(input: {
+export function buildCalendarMovePatch(input: {
   target:
     | CalendarMoveTarget
     | undefined;
@@ -36,7 +36,12 @@ export function buildGoogleCalendarMovePatch(input: {
   }
 
   if (
-    target.provider !== "GOOGLE"
+    ![
+      "GOOGLE",
+      "MICROSOFT"
+    ].includes(
+      target.provider
+    )
   ) {
     throw new CalendarMoveError(
       "CALENDAR_PROVIDER_UNSUPPORTED",
@@ -211,7 +216,7 @@ export function calendarMoveFailurePresentation(
     case "CONFLICT":
       return {
         humanSummary:
-          "Begivenheden er ændret i Google siden sidste synkronisering. Gennemgå den nyeste version og prøv igen.",
+          "Begivenheden er ændret i den eksterne kalender siden sidste synkronisering. Gennemgå den nyeste version og prøv igen.",
         recovery: {
           label: "Gennemgå kalender",
           action: "calendar.get_event"
@@ -221,9 +226,9 @@ export function calendarMoveFailurePresentation(
     case "AUTH_EXPIRED":
       return {
         humanSummary:
-          "Google Calendar skal forbindes igen, før begivenheden kan ændres.",
+          "Kalenderforbindelsen skal fornyes, før begivenheden kan ændres.",
         recovery: {
-          label: "Forbind Google igen",
+          label: "Forbind kalender igen",
           action: "connection.reconnect"
         }
       };
@@ -232,7 +237,7 @@ export function calendarMoveFailurePresentation(
     case "UNAVAILABLE":
       return {
         humanSummary:
-          "Google Calendar er midlertidigt utilgængelig. Prøv igen om lidt.",
+          "Kalenderudbyderen er midlertidigt utilgængelig. Prøv igen om lidt.",
         recovery: {
           label: "Prøv igen",
           action: "calendar.move_event"
@@ -277,3 +282,7 @@ export function calendarMoveFailurePresentation(
       };
   }
 }
+
+
+export const buildGoogleCalendarMovePatch =
+  buildCalendarMovePatch;
