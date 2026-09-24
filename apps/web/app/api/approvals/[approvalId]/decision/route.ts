@@ -8,11 +8,13 @@ import {
   getApprovalIntent,
   markActionIntentApproved,
   persistCalendarWriteResult,
+  persistCreatedCalendarEvent,
   TransactionalPostgresActionStore,
   withPrincipalTransaction
 } from "@skrivebord/database";
 import { z } from "zod";
 import {
+  createCalendarEventAction,
   createMoveCalendarEventAction
 } from "@/lib/calendar-actions";
 import {
@@ -142,8 +144,12 @@ export async function POST(
   }
 
   if (
-    intent.actionId !==
-    "calendar.move"
+    ![
+      "calendar.move",
+      "calendar.create"
+    ].includes(
+      intent.actionId
+    )
   ) {
     return Response.json(
       {
@@ -285,21 +291,38 @@ export async function POST(
   );
 
   const result =
-    await executeAction({
-      definition:
-        createMoveCalendarEventAction(),
-      principal,
-      rawInput:
-        intent.parameters,
-      idempotencyKey:
-        intent.idempotencyKey ??
-        `approval:${approvalId}`,
-      approvalId,
-      approvalGranted,
-      existingIntentId:
-        intent.actionIntentId,
-      store
-    });
+    intent.actionId ===
+    "calendar.create"
+      ? await executeAction({
+          definition:
+            createCalendarEventAction(),
+          principal,
+          rawInput:
+            intent.parameters,
+          idempotencyKey:
+            intent.idempotencyKey ??
+            `approval:${approvalId}`,
+          approvalId,
+          approvalGranted,
+          existingIntentId:
+            intent.actionIntentId,
+          store
+        })
+      : await executeAction({
+          definition:
+            createMoveCalendarEventAction(),
+          principal,
+          rawInput:
+            intent.parameters,
+          idempotencyKey:
+            intent.idempotencyKey ??
+            `approval:${approvalId}`,
+          approvalId,
+          approvalGranted,
+          existingIntentId:
+            intent.actionIntentId,
+          store
+        });
 
   if (
     result.status ===
@@ -311,19 +334,40 @@ export async function POST(
         databasePool,
         principal,
         ({ db }) =>
-          persistCalendarWriteResult(
-            db,
-            {
-              workspaceId:
-                principal.workspaceId,
-              localTargetEventId:
-                result.data!
-                  .localTargetEventId,
-              providerResult:
-                result.data!
-                  .providerResult
-            }
-          )
+          "localTargetEventId" in
+          result.data!
+            ? persistCalendarWriteResult(
+                db,
+                {
+                  workspaceId:
+                    principal.workspaceId,
+                  localTargetEventId:
+                    result.data!
+                      .localTargetEventId,
+                  providerResult:
+                    result.data!
+                      .providerResult
+                }
+              )
+            : persistCreatedCalendarEvent(
+                db,
+                {
+                  workspaceId:
+                    principal.workspaceId,
+                  calendarSourceId:
+                    result.data!
+                      .calendarSourceId,
+                  providerResult:
+                    result.data!
+                      .providerResult,
+                  originActorType:
+                    intent
+                      .requestedByPrincipalType,
+                  originActorId:
+                    intent
+                      .requestedByPrincipalId
+                }
+              )
       );
     } catch {
       try {
@@ -414,8 +458,18 @@ export async function POST(
         presentation.humanSummary,
       ...(presentation.recovery
         ? {
-            recovery:
-              presentation.recovery
+            recovery: {
+              ...presentation.recovery,
+              action:
+                intent.actionId ===
+                  "calendar.create" &&
+                presentation.recovery
+                  .action ===
+                  "calendar.move_event"
+                  ? "calendar.create_event"
+                  : presentation.recovery
+                    .action
+            }
           }
         : {})
     },
