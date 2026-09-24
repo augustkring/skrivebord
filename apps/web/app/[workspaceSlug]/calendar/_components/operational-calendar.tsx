@@ -89,8 +89,12 @@ export function OperationalCalendar({
               event.allDay,
             editable:
               canUpdateCalendar &&
-              event.provider ===
-                "GOOGLE" &&
+              [
+                "GOOGLE",
+                "MICROSOFT"
+              ].includes(
+                event.provider
+              ) &&
               event.writable &&
               [
                 "CONNECTED",
@@ -330,8 +334,12 @@ export function OperationalCalendar({
 
             <div className="mt-4">
               {canUpdateCalendar &&
-              selected.provider ===
-                "GOOGLE" &&
+              [
+                "GOOGLE",
+                "MICROSOFT"
+              ].includes(
+                selected.provider
+              ) &&
               selected.writable &&
               [
                 "CONNECTED",
