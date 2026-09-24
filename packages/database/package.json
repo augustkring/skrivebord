@@ -1,0 +1,21 @@
+{
+  "name": "@skrivebord/database",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./schema": "./src/schema.ts"
+  },
+  "dependencies": {
+    "@skrivebord/actions": "workspace:*",
+    "@skrivebord/contracts": "workspace:*",
+    "drizzle-orm": "^0.44.5",
+    "pg": "8.23.0",
+    "@skrivebord/domain": "workspace:*",
+    "@skrivebord/connectors": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/pg": "8.23.1"
+  }
+}

@@ -1,0 +1,85 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main, "build/**"]
+
+permissions:
+  contents: write
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: skrivebord
+          POSTGRES_PASSWORD: skrivebord
+          POSTGRES_DB: skrivebord
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U skrivebord -d skrivebord"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgresql://skrivebord:skrivebord@127.0.0.1:5432/skrivebord
+      BETTER_AUTH_SECRET: ci-only-auth-secret-at-least-32-bytes-long
+      BETTER_AUTH_URL: http://localhost:3000
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.head_ref || github.ref_name }}
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.17.1
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - run: pnpm install --no-frozen-lockfile
+      - name: Generate Better Auth schema
+        run: |
+          mkdir -p generated
+          pnpm dlx auth@1.6.17 generate --config apps/web/lib/auth.ts --output generated/better-auth.sql --yes
+          cp generated/better-auth.sql drizzle/0002_better_auth.sql
+      - name: Run migration smoke
+        run: |
+          for file in drizzle/*.sql; do
+            echo "Applying $file"
+            psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f "$file"
+          done
+      - name: Create limited application role
+        run: |
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 <<'SQL'
+          create role skrivebord_app
+            login
+            password 'skrivebord_app'
+            nosuperuser
+            nocreatedb
+            nocreaterole
+            noinherit;
+          grant connect on database skrivebord to skrivebord_app;
+          grant usage on schema public to skrivebord_app;
+          grant select, insert, update, delete on all tables in schema public to skrivebord_app;
+          grant usage, select on all sequences in schema public to skrivebord_app;
+          revoke update, delete on audit_event from skrivebord_app;
+          SQL
+          echo "DATABASE_TEST_URL=postgresql://skrivebord_app:skrivebord_app@127.0.0.1:5432/skrivebord" >> "$GITHUB_ENV"
+      - run: pnpm lint
+      - run: pnpm typecheck
+      - run: pnpm test
+      - run: pnpm build
+      - name: Commit tested lockfile and auth schema
+        if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
+        run: |
+          if git diff --quiet -- pnpm-lock.yaml drizzle/0002_better_auth.sql && git ls-files --error-unmatch pnpm-lock.yaml drizzle/0002_better_auth.sql >/dev/null 2>&1; then
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add pnpm-lock.yaml drizzle/0002_better_auth.sql
+          git commit -m "chore: lock tested auth dependencies and schema"
+          git push origin HEAD:${{ github.head_ref }}
