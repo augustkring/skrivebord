@@ -46,8 +46,12 @@ export function buildGoogleCalendarMovePatch(input: {
 
   if (
     !target.writable ||
-    target.syncState !==
-      "CONNECTED"
+    ![
+      "CONNECTED",
+      "HEALTHY"
+    ].includes(
+      target.syncState
+    )
   ) {
     throw new CalendarMoveError(
       "CALENDAR_SOURCE_NOT_WRITABLE",
