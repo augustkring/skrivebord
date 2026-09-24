@@ -339,3 +339,277 @@ export async function persistCalendarWriteResult(
     );
   }
 }
+
+
+export type CalendarCreateTarget = {
+  calendarSourceId: string;
+  connectorAccountId: string;
+  provider: string;
+  providerCalendarId: string;
+  sourceName: string;
+  writable: boolean;
+  syncState: string;
+};
+
+export async function getCalendarCreateTarget(
+  db: SkrivebordDatabase,
+  input: {
+    workspaceId: string;
+    calendarSourceId: string;
+  }
+): Promise<
+  CalendarCreateTarget | undefined
+> {
+  const [source] =
+    await db
+      .select({
+        calendarSourceId:
+          calendarSource.id,
+        connectorAccountId:
+          calendarSource
+            .connectorAccountId,
+        provider:
+          calendarSource.provider,
+        providerCalendarId:
+          calendarSource
+            .providerCalendarId,
+        sourceName:
+          calendarSource
+            .displayName,
+        writable:
+          calendarSource.writable,
+        syncState:
+          calendarSource.syncState
+      })
+      .from(calendarSource)
+      .where(
+        and(
+          eq(
+            calendarSource.workspaceId,
+            input.workspaceId
+          ),
+          eq(
+            calendarSource.id,
+            input.calendarSourceId
+          )
+        )
+      )
+      .limit(1);
+
+  if (
+    !source ||
+    !source.connectorAccountId
+  ) {
+    return undefined;
+  }
+
+  return {
+    calendarSourceId:
+      source.calendarSourceId,
+    connectorAccountId:
+      source.connectorAccountId,
+    provider:
+      source.provider,
+    providerCalendarId:
+      source.providerCalendarId,
+    sourceName:
+      source.sourceName,
+    writable:
+      source.writable,
+    syncState:
+      source.syncState
+  };
+}
+
+export async function persistCreatedCalendarEvent(
+  db: SkrivebordDatabase,
+  input: {
+    workspaceId: string;
+    calendarSourceId: string;
+    providerResult: CalendarSyncEvent;
+    originActorType:
+      | "HUMAN"
+      | "AGENT"
+      | "SYSTEM";
+    originActorId: string;
+    now?: Date;
+  }
+): Promise<string> {
+  const now =
+    input.now ?? new Date();
+
+  const [event] =
+    await db
+      .insert(calendarEvent)
+      .values({
+        workspaceId:
+          input.workspaceId,
+        calendarSourceId:
+          input.calendarSourceId,
+        providerEventId:
+          input.providerResult
+            .providerEventId,
+        providerVersion:
+          input.providerResult
+            .providerVersion,
+        title:
+          input.providerResult
+            .title,
+        descriptionSanitized:
+          input.providerResult
+            .descriptionSanitized,
+        startAt:
+          input.providerResult
+            .startAt
+            ? new Date(
+                input.providerResult
+                  .startAt
+              )
+            : null,
+        endAt:
+          input.providerResult
+            .endAt
+            ? new Date(
+                input.providerResult
+                  .endAt
+              )
+            : null,
+        startDate:
+          input.providerResult
+            .startDate,
+        endDate:
+          input.providerResult
+            .endDate,
+        allDay:
+          input.providerResult
+            .allDay,
+        timezone:
+          input.providerResult
+            .timezone,
+        recurrenceMasterId:
+          input.providerResult
+            .recurrenceMasterId,
+        recurrenceOriginalStartAt:
+          input.providerResult
+            .recurrenceOriginalStartAt
+            ? new Date(
+                input.providerResult
+                  .recurrenceOriginalStartAt
+              )
+            : null,
+        recurrenceRule:
+          input.providerResult
+            .recurrenceRule,
+        status:
+          input.providerResult
+            .status,
+        category:
+          "EXTERNAL",
+        originActorType:
+          input.originActorType,
+        originActorId:
+          input.originActorId,
+        sourceUpdatedAt:
+          input.providerResult
+            .sourceUpdatedAt
+            ? new Date(
+                input.providerResult
+                  .sourceUpdatedAt
+              )
+            : now,
+        normalizedAt: now,
+        updatedAt: now
+      })
+      .onConflictDoUpdate({
+        target: [
+          calendarEvent
+            .workspaceId,
+          calendarEvent
+            .calendarSourceId,
+          calendarEvent
+            .providerEventId
+        ],
+        set: {
+          providerVersion:
+            input.providerResult
+              .providerVersion,
+          title:
+            input.providerResult
+              .title,
+          descriptionSanitized:
+            input.providerResult
+              .descriptionSanitized,
+          startAt:
+            input.providerResult
+              .startAt
+              ? new Date(
+                  input
+                    .providerResult
+                    .startAt
+                )
+              : null,
+          endAt:
+            input.providerResult
+              .endAt
+              ? new Date(
+                  input
+                    .providerResult
+                    .endAt
+                )
+              : null,
+          startDate:
+            input.providerResult
+              .startDate,
+          endDate:
+            input.providerResult
+              .endDate,
+          allDay:
+            input.providerResult
+              .allDay,
+          timezone:
+            input.providerResult
+              .timezone,
+          recurrenceMasterId:
+            input.providerResult
+              .recurrenceMasterId,
+          recurrenceOriginalStartAt:
+            input.providerResult
+              .recurrenceOriginalStartAt
+              ? new Date(
+                  input
+                    .providerResult
+                    .recurrenceOriginalStartAt
+                )
+              : null,
+          recurrenceRule:
+            input.providerResult
+              .recurrenceRule,
+          status:
+            input.providerResult
+              .status,
+          sourceUpdatedAt:
+            input.providerResult
+              .sourceUpdatedAt
+              ? new Date(
+                  input
+                    .providerResult
+                    .sourceUpdatedAt
+                )
+              : now,
+          normalizedAt: now,
+          updatedAt: now
+        }
+      })
+      .returning({
+        id:
+          calendarEvent.id
+      });
+
+  if (!event) {
+    throw new Error(
+      "CALENDAR_EVENT_CREATE_PERSIST_FAILED"
+    );
+  }
+
+  return event.id;
+}
