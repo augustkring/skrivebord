@@ -383,6 +383,206 @@ describeDatabase("database tenant isolation", () => {
 
 
 
+  it("persists Microsoft delta events into the same normalized calendar model", async () => {
+    const actor = principal(
+      workspaceA,
+      "microsoft-calendar-sync"
+    );
+
+    const stored =
+      await withPrincipalTransaction(
+        pool,
+        actor,
+        async ({ db }) => {
+          const [account] =
+            await db
+              .insert(
+                connectorAccount
+              )
+              .values({
+                workspaceId:
+                  workspaceA,
+                provider:
+                  "MICROSOFT",
+                displayName:
+                  "Microsoft 365",
+                providerAccountId:
+                  `ms-${suffix}`,
+                status:
+                  "CONNECTED",
+                scopes: [
+                  "Calendars.ReadWrite"
+                ],
+                connectedBy:
+                  actor.principalId
+              })
+              .returning({
+                id:
+                  connectorAccount.id
+              });
+
+          if (!account) {
+            throw new Error(
+              "MICROSOFT_CONNECTOR_ACCOUNT_CREATE_FAILED"
+            );
+          }
+
+          const [source] =
+            await db
+              .insert(
+                calendarSource
+              )
+              .values({
+                workspaceId:
+                  workspaceA,
+                provider:
+                  "MICROSOFT",
+                connectorAccountId:
+                  account.id,
+                providerCalendarId:
+                  "ms-primary",
+                displayName:
+                  "Calendar",
+                writable: true,
+                isPrimary: true,
+                syncState:
+                  "SYNCING"
+              })
+              .returning({
+                id:
+                  calendarSource.id
+              });
+
+          if (!source) {
+            throw new Error(
+              "MICROSOFT_CALENDAR_SOURCE_CREATE_FAILED"
+            );
+          }
+
+          const result =
+            await persistCalendarSync(
+              db,
+              {
+                workspaceId:
+                  workspaceA,
+                connectorAccountId:
+                  account.id,
+                calendarSourceId:
+                  source.id,
+                resourceScope:
+                  "ms-primary",
+                provider:
+                  "MICROSOFT",
+                mode:
+                  "INITIAL",
+                result: {
+                  fullResyncRequired:
+                    false,
+                  cursor: {
+                    type:
+                      "MICROSOFT_DELTA_LINK",
+                    value:
+                      "https://graph.microsoft.com/v1.0/me/calendars/ms-primary/calendarView/delta?$deltatoken=final"
+                  },
+                  events: [
+                    {
+                      providerEventId:
+                        "ms-event-1",
+                      providerVersion:
+                        "W/\"etag-1\"",
+                      title:
+                        "Microsoft event",
+                      startAt:
+                        "2026-09-25T09:00:00Z",
+                      endAt:
+                        "2026-09-25T10:00:00Z",
+                      allDay: false,
+                      timezone:
+                        "UTC",
+                      status:
+                        "CONFIRMED",
+                      sourceUpdatedAt:
+                        "2026-09-24T10:00:00Z"
+                    }
+                  ]
+                },
+                protectCursor:
+                  (raw) =>
+                    `protected:${raw}`,
+                now:
+                  new Date(
+                    "2026-09-24T10:05:00Z"
+                  )
+              }
+            );
+
+          const [event] =
+            await db
+              .select()
+              .from(
+                calendarEvent
+              )
+              .where(
+                eq(
+                  calendarEvent
+                    .providerEventId,
+                  "ms-event-1"
+                )
+              );
+
+          const [cursor] =
+            await db
+              .select()
+              .from(
+                syncCursor
+              )
+              .where(
+                eq(
+                  syncCursor
+                    .connectorAccountId,
+                  account.id
+                )
+              );
+
+          return {
+            result,
+            event,
+            cursor
+          };
+        }
+      );
+
+    expect(
+      stored.result
+    ).toMatchObject({
+      applied: true,
+      fullResyncRequired:
+        false,
+      itemsSeen: 1,
+      itemsCreated: 1
+    });
+
+    expect(
+      stored.event?.title
+    ).toBe(
+      "Microsoft event"
+    );
+
+    expect(
+      stored.cursor
+        ?.cursorType
+    ).toBe(
+      "MICROSOFT_DELTA_LINK"
+    );
+
+    expect(
+      stored.cursor
+        ?.cursorValueProtected
+    ).toContain(
+      "protected:https://graph.microsoft.com/"
+    );
+  });
+
   it("replaces expanded recurring instances atomically and hides the series master from calendar reads", async () => {
     const actor = principal(
       workspaceA,
