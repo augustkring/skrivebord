@@ -5,6 +5,7 @@ import {
   getActionStatus,
   getCalendarEvent,
   listCalendarEvents,
+  listCalendarSources,
   listTodayItems,
   listYearPlanItems,
   loadOperationalSnapshot,
@@ -18,6 +19,7 @@ import { createMcpHandler } from "mcp-handler";
 import { z } from "zod";
 import { databasePool } from "@/lib/database";
 import {
+  createCalendarEventAction,
   createMoveCalendarEventAction
 } from "@/lib/calendar-actions";
 import { resolveMcpAgentPrincipal } from "@/lib/mcp-auth";
@@ -60,6 +62,15 @@ const yearPlanSchema = z.object({
   windowEndDay: z.number().int().min(1).max(31),
   windowLabel: z.string(),
   active: z.boolean()
+});
+
+const calendarSourceSchema = z.object({
+  id: z.string().uuid(),
+  provider: z.string(),
+  displayName: z.string(),
+  writable: z.boolean(),
+  isPrimary: z.boolean(),
+  syncState: z.string()
 });
 
 const calendarEventSchema = z.object({
@@ -644,6 +655,236 @@ function buildHandler(principal: PrincipalContext) {
                 }
               ],
               structuredContent: output
+            };
+          }
+        );
+      }
+
+
+      if (has(principal, "calendar.read")) {
+        server.registerTool(
+          "calendar.list_sources",
+          {
+            title: "List kalenderkilder",
+            description:
+              "Lister kalenderkilder og viser hvilke der er skrivbare i agentens workspace.",
+            inputSchema: z.object({}),
+            outputSchema: z.object({
+              humanSummary: z.string(),
+              sources: z.array(
+                calendarSourceSchema
+              )
+            }),
+            annotations: {
+              readOnlyHint: true
+            }
+          },
+          async () => {
+            const rows =
+              await withPrincipalTransaction(
+                databasePool,
+                principal,
+                ({ db }) =>
+                  listCalendarSources(
+                    db,
+                    principal.workspaceId
+                  )
+              );
+
+            const sources =
+              rows.map(
+                (source) => ({
+                  id: source.id,
+                  provider:
+                    source.provider,
+                  displayName:
+                    source.displayName,
+                  writable:
+                    source.writable,
+                  isPrimary:
+                    source.isPrimary,
+                  syncState:
+                    source.syncState
+                })
+              );
+
+            const output = {
+              humanSummary:
+                `${sources.length} kalenderkilder fundet.`,
+              sources
+            };
+
+            return {
+              content: [
+                {
+                  type: "text",
+                  text:
+                    output.humanSummary
+                }
+              ],
+              structuredContent:
+                output
+            };
+          }
+        );
+      }
+
+      if (has(principal, "calendar.create")) {
+        server.registerTool(
+          "calendar.create_event",
+          {
+            title: "Opret kalenderbegivenhed",
+            description:
+              "Anmoder om at oprette en kalenderbegivenhed i en valgt skrivbar kalender. Mojn kan ikke selv godkende handlingen.",
+            inputSchema: z.object({
+              calendarSourceId:
+                z.string().uuid(),
+              title:
+                z.string()
+                  .trim()
+                  .min(1)
+                  .max(300),
+              description:
+                z.string()
+                  .max(20_000)
+                  .optional(),
+              timing:
+                z.discriminatedUnion(
+                  "kind",
+                  [
+                    z.object({
+                      kind:
+                        z.literal(
+                          "TIMED"
+                        ),
+                      startsAt:
+                        z.string()
+                          .datetime({
+                            offset: true
+                          }),
+                      endsAt:
+                        z.string()
+                          .datetime({
+                            offset: true
+                          }),
+                      timezone:
+                        z.string()
+                          .min(1)
+                          .max(100)
+                          .optional()
+                    }).strict(),
+                    z.object({
+                      kind:
+                        z.literal(
+                          "ALL_DAY"
+                        ),
+                      startDate:
+                        z.string()
+                          .regex(
+                            /^\d{4}-\d{2}-\d{2}$/
+                          ),
+                      endDate:
+                        z.string()
+                          .regex(
+                            /^\d{4}-\d{2}-\d{2}$/
+                          )
+                    }).strict()
+                  ]
+                ),
+              idempotencyKey:
+                z.string().uuid()
+            }).strict(),
+            outputSchema: z.object({
+              status: z.enum([
+                "PENDING_APPROVAL",
+                "SUCCEEDED",
+                "FAILED",
+                "DENIED",
+                "CONFLICT"
+              ]),
+              humanSummary:
+                z.string(),
+              actionId:
+                z.string()
+                  .uuid()
+                  .optional(),
+              approvalId:
+                z.string()
+                  .uuid()
+                  .optional(),
+              executionId:
+                z.string()
+                  .uuid()
+                  .optional()
+            }),
+            annotations: {
+              readOnlyHint: false,
+              destructiveHint:
+                false,
+              idempotentHint:
+                true
+            }
+          },
+          async ({
+            calendarSourceId,
+            title,
+            description,
+            timing,
+            idempotencyKey
+          }) => {
+            const store =
+              new TransactionalPostgresActionStore(
+                databasePool,
+                principal
+              );
+
+            const result =
+              await executeAction({
+                definition:
+                  createCalendarEventAction(),
+                principal,
+                rawInput: {
+                  workspaceId:
+                    principal.workspaceId,
+                  calendarSourceId,
+                  title,
+                  ...(description
+                    ? {
+                        description
+                      }
+                    : {}),
+                  timing
+                },
+                idempotencyKey,
+                store
+              });
+
+            const output = {
+              status:
+                result.status,
+              humanSummary:
+                result.humanSummary,
+              actionId:
+                result.actionId,
+              approvalId:
+                result.approvalId,
+              executionId:
+                result.executionId
+            };
+
+            return {
+              content: [
+                {
+                  type: "text",
+                  text:
+                    result.status ===
+                    "PENDING_APPROVAL"
+                      ? `${result.humanSummary} Afventer menneskelig godkendelse.`
+                      : result.humanSummary
+                }
+              ],
+              structuredContent:
+                output
             };
           }
         );
