@@ -487,7 +487,8 @@ export class MicrosoftCalendarConnector
 
     return this.syncPages(
       input.accessToken,
-      url
+      url,
+      false
     );
   }
 
@@ -510,13 +511,15 @@ export class MicrosoftCalendarConnector
       input.accessToken,
       assertDeltaLink(
         input.cursor.value
-      )
+      ),
+      true
     );
   }
 
   private async syncPages(
     accessToken: string,
-    initialUrl: URL
+    initialUrl: URL,
+    allowReset: boolean
   ): Promise<CalendarSyncResult> {
     const events:
       CalendarSyncEvent[] = [];
@@ -541,6 +544,16 @@ export class MicrosoftCalendarConnector
               )
           }
         );
+
+      if (
+        allowReset &&
+        response.status === 410
+      ) {
+        return {
+          events: [],
+          fullResyncRequired: true
+        };
+      }
 
       if (!response.ok) {
         throw graphError(
